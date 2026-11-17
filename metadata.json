@@ -1,0 +1,6 @@
+{
+  "name": "TelecomAtlas",
+  "description": "Self-hosted open-source worldwide phone number intelligence platform featuring E.164 validation, deterministic Radix-Trie carrier prefix detection, line classification, and hierarchical geographic ownership mapping.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
