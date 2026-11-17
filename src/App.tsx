@@ -359,9 +359,9 @@ export default function App() {
   }, [filters.country, filters.region, filters.search, filters.zipInput]);
 
   return (
-    <div className="h-[100dvh] w-screen overflow-hidden flex flex-col bg-slate-50 text-slate-900">
+    <div className="h-[100dvh] w-full max-w-full overflow-x-hidden overflow-y-hidden flex flex-col bg-slate-50 text-slate-900">
       {/* Strict 3-Zone Top Bar Contract — Sleek Compact Height Across Mobile & Desktop */}
-      <header className="h-11 md:h-13 shrink-0 bg-white border-b border-slate-200 px-3 sm:px-5 flex items-center justify-between gap-4 md:gap-8 z-30">
+      <header className="h-11 md:h-13 shrink-0 bg-white border-b border-slate-200 px-3 sm:px-5 flex items-center justify-between gap-3 md:gap-8 z-30">
         {/* Zone 1: Brand Wordmark */}
         <a
           href="/directory"

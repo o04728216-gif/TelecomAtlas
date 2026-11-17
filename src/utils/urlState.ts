@@ -2,11 +2,12 @@ import type { ActiveFilters } from '../components/FilterSidebar.tsx';
 import type { LineType } from '../shared/types.ts';
 
 export type WorkspaceTab = 'explorer' | 'finder' | 'web' | 'ingestion';
-export type FinderSubMode = 'phone' | 'people' | 'batch';
+export type FinderSubMode = 'phone' | 'email' | 'people' | 'batch';
 
 export interface FinderUrlState {
   subMode: FinderSubMode;
   phoneQuery: string;
+  emailQuery: string;
   firstName: string;
   lastName: string;
   city: string;
@@ -55,6 +56,7 @@ const DEFAULT_FILTERS: ActiveFilters = {
 const DEFAULT_FINDER: FinderUrlState = {
   subMode: 'phone',
   phoneQuery: '',
+  emailQuery: '',
   firstName: '',
   lastName: '',
   city: '',
@@ -82,7 +84,10 @@ export function parseAppUrl(pathname: string, search: string): ParsedAppUrlState
   if (root === 'contact-finder') {
     tab = 'finder';
     const sub = (segments[1] ?? '').toLowerCase();
-    if (sub === 'people') {
+    if (sub === 'email') {
+      finder.subMode = 'email';
+      finder.emailQuery = params.get('email') ?? (segments[2] ?? '');
+    } else if (sub === 'people') {
       finder.subMode = 'people';
       finder.firstName = params.get('first') ?? '';
       finder.lastName = params.get('last') ?? '';
@@ -178,6 +183,19 @@ export function buildAppUrlAndTitle(state: {
   const { tab, filters, pageOffset, finder, webMode } = state;
 
   if (tab === 'finder') {
+    if (finder.subMode === 'email') {
+      const cleanedEmail = finder.emailQuery.trim();
+      const p = new URLSearchParams();
+      if (cleanedEmail) p.set('email', cleanedEmail);
+      const qs = p.toString();
+      return {
+        url: `/contact-finder/email${qs ? `?${qs}` : ''}`,
+        title: cleanedEmail
+          ? `Email Lookup: ${cleanedEmail} — TelecomAtlas`
+          : 'Reverse Email Lookup — TelecomAtlas',
+      };
+    }
+
     if (finder.subMode === 'people') {
       const p = new URLSearchParams();
       if (finder.firstName.trim()) p.set('first', finder.firstName.trim());

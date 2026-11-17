@@ -6,6 +6,7 @@ import { parseAndClassifyPhoneNumber } from './src/server/prefixEngine.ts';
 import { registryStore } from './src/server/registryStore.ts';
 import type { QueryFilterInput } from './src/server/registryStore.ts';
 import {
+  lookupPublicContactByEmail,
   lookupPublicContactByPhone,
   searchPublicPeopleComprehensive,
 } from './src/server/contactFinderService.ts';
@@ -129,6 +130,21 @@ async function startServer() {
     } catch (error) {
       console.error('Error in /api/contact-finder/phone:', error);
       return res.status(500).json({ error: 'Failed to retrieve public contact report.' });
+    }
+  });
+
+  // 3b. Dedicated Contact Finder — Reverse Email Public Dossier Lookup
+  app.post('/api/contact-finder/email', async (req, res) => {
+    try {
+      const { email } = req.body as { email?: string };
+      if (!email || !email.trim()) {
+        return res.status(400).json({ error: 'Please enter an email address to look up.' });
+      }
+      const report = await lookupPublicContactByEmail(email.trim());
+      return res.json(report);
+    } catch (error) {
+      console.error('Error in /api/contact-finder/email:', error);
+      return res.status(500).json({ error: 'Failed to retrieve public contact report for email.' });
     }
   });
 

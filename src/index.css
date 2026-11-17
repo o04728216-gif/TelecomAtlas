@@ -7,9 +7,22 @@
     --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
   body {
     font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  button, a, input, select, textarea, label, [role="button"] {
+    touch-action: manipulation;
   }
 
   h1, h2, h3, h4, .font-display {
@@ -19,6 +32,16 @@
   code, pre, .font-mono {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Eliminate iOS Safari & Android Chrome automatic zoom when tapping/focusing form inputs */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+    line-height: 1.35 !important;
   }
 }
 

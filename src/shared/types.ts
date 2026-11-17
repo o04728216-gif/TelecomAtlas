@@ -84,6 +84,8 @@ export interface PhoneNumberRecord {
   city: string | null;
   county?: string | null;
   estimatedAge?: number | null;
+  dateOfBirth?: string | null;
+  dateOfBirthIso?: string | null;
   matchConfidenceLabel?: string | null;
   relativesPreview?: string[];
   latitude: number | null;
@@ -243,6 +245,8 @@ export interface VehicleOwnedRecord {
 export interface RelativeContactRecord {
   name: string;
   age: number;
+  dateOfBirth?: string | null;
+  dateOfBirthIso?: string | null;
   relationship:
     | 'Possible Spouse / Partner'
     | 'Immediate Relative'
@@ -281,8 +285,21 @@ export interface PropertyAndResidenceProfile {
   coordinates: string | null;
 }
 
+export type SocialPlatformCategory =
+  | 'Social'
+  | 'Professional'
+  | 'Creator & Media'
+  | 'Messaging'
+  | 'Payments'
+  | 'Developer & Tech'
+  | 'Community';
+
 export interface SocialWebProfile {
   platform: string;
+  handle: string;
+  category: SocialPlatformCategory;
+  status: 'Verified Web Match' | 'Active Handle Matched' | 'Profile Indexed';
+  verified?: boolean;
   label: string;
   url: string;
 }
@@ -296,8 +313,61 @@ export interface AssociatedContactItem {
     | 'Same Local Exchange';
 }
 
+export interface SpicyIntelligenceReport {
+  legalAndCourt: {
+    voterRegistration: string;
+    partyAffiliation: string;
+    voterDistrict: string;
+    civilJudgments: string;
+    liensAndUcc: string;
+    bankruptcyHistory: string;
+    evictionFilings: string;
+    trafficViolations: string;
+    specialtyPermits: string[];
+  };
+  financialAndProperty: {
+    estimatedAnnualIncome: string;
+    estimatedNetWorth: string;
+    purchasingPowerTier: string;
+    propertyDeedYear: string;
+    estimatedMortgageBalance: string;
+    estimatedHomeEquity: string;
+    annualPropertyTax: string;
+    secondaryAssets: string;
+  };
+  digitalAndExposure: {
+    primaryHandles: string[];
+    breachAlerts: Array<{
+      source: string;
+      breachDate: string;
+      exposedFields: string;
+      riskLevel: 'High' | 'Moderate' | 'Low';
+    }>;
+    homeBroadbandIsp: string;
+    deviceEcosystem: string;
+    gravatarStatus: string;
+  };
+  socialAndAssociatesExtended: {
+    formerNames: string[];
+    roommatesAndCohabitants: Array<{
+      name: string;
+      age: number;
+      relationNote: string;
+      yearsShared: string;
+    }>;
+    politicalAndDonorFilings: Array<{
+      recipientOrOrg: string;
+      amountRange: string;
+      cycle: string;
+      cityState: string;
+    }>;
+    interestsAndAffiliations: string[];
+  };
+}
+
 export interface ContactFinderReport {
   queryPhone: string;
+  queryEmail?: string | null;
   existenceStatus:
     | 'CONFIRMED_PUBLIC_RECORD'
     | 'VALID_ALLOCATED_EXCHANGE'
@@ -308,6 +378,10 @@ export interface ContactFinderReport {
     name: string;
     age: number | null;
     birthYear: number | null;
+    dateOfBirth: string | null;
+    dateOfBirthIso: string | null;
+    zodiacSign?: string | null;
+    birthPlace?: string | null;
     aliases: string[];
     jobTitle: string | null;
     employer: string | null;
@@ -327,6 +401,7 @@ export interface ContactFinderReport {
   educationHistory: EducationRecord[];
   professionalLicenses: ProfessionalLicenseRecord[];
   socialProfiles: SocialWebProfile[];
+  spicyIntel?: SpicyIntelligenceReport | null;
   associatedPhones: Array<{
     e164: string;
     display: string;

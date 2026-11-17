@@ -169,7 +169,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     zipInput: '',
                   }));
                 }}
-                className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                className="w-full h-10 sm:h-8 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
               >
                 <option value="">
                   All Continents ({formatCompactNumber(facets?.totalRegistryRecords ?? 0)})
@@ -201,7 +201,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     zipInput: '',
                   }));
                 }}
-                className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                className="w-full h-10 sm:h-8 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
               >
                 <option value="">All Countries ({facets?.countries.length ?? 0})</option>
                 {facets?.countries.map((c) => (
@@ -230,7 +230,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     zipInput: '',
                   }));
                 }}
-                className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                className="w-full h-10 sm:h-8 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
               >
                 <option value="">All States &amp; Regions ({facets?.regions.length ?? 0})</option>
                 {facets?.regions.map((r) => (
@@ -266,7 +266,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     onChangeFilters((prev) => ({ ...prev, zipInput: e.target.value }))
                   }
                   placeholder="e.g. 90210, SW1A, 100-0001"
-                  className="w-full h-8 pl-2.5 pr-7 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-10 sm:h-8 pl-2.5 pr-7 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
                 {filters.zipInput && (
                   <button
@@ -368,7 +368,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                 value={carrierQuery}
                 onChange={(e) => setCarrierQuery(e.target.value)}
                 placeholder="AT&T, Verizon, Vodafone, Jio..."
-                className="w-full h-8 pl-8 pr-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                className="w-full h-10 sm:h-8 pl-8 pr-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
               />
             </div>
 
@@ -420,7 +420,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                 onChangeFilters((prev) => ({ ...prev, prefix: e.target.value }))
               }
               placeholder="e.g. 310, 212, +44, +81"
-              className="w-full h-8 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
+              className="w-full h-10 sm:h-8 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
             />
           </section>
         </div>

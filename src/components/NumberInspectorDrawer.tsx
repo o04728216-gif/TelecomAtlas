@@ -48,7 +48,7 @@ export const NumberInspectorDrawer: React.FC<NumberInspectorDrawerProps> = ({
 
       <aside
         aria-label="Quick View Subscriber Details"
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[82vh] rounded-t-2xl shadow-2xl border-t border-slate-200 xl:static xl:z-auto xl:w-88 xl:max-h-none xl:rounded-none xl:shadow-none xl:border-t-0 xl:border-l shrink-0 bg-white flex flex-col xl:h-full overflow-hidden"
+        className="fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] rounded-t-2xl shadow-2xl border-t border-slate-200 xl:static xl:z-auto xl:w-88 xl:max-h-none xl:rounded-none xl:shadow-none xl:border-t-0 xl:border-l shrink-0 bg-white flex flex-col xl:h-full overflow-hidden"
       >
         {/* Mobile Drag Handle */}
         <div className="xl:hidden pt-2 pb-0.5 flex justify-center shrink-0">
@@ -106,7 +106,7 @@ export const NumberInspectorDrawer: React.FC<NumberInspectorDrawerProps> = ({
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-4 space-y-4 text-xs overflow-y-auto flex-1">
+        <div className="p-4 pb-8 xl:pb-4 space-y-4 text-xs overflow-y-auto flex-1">
           {/* Primary Dossier Action + Compact Icon-Only Copy Rows */}
           <section className="space-y-2">
             <button

@@ -182,7 +182,7 @@ export const GlobalPulseModal: React.FC<GlobalPulseModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-2xl max-h-[90vh] bg-white rounded-t-2xl sm:rounded-xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden"
+        className="w-full sm:max-w-2xl max-h-[92dvh] bg-white rounded-t-2xl sm:rounded-xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -462,7 +462,7 @@ export const GlobalPulseModal: React.FC<GlobalPulseModalProps> = ({
 
           {/* 3. 80-Country Instant Atlas Jump */}
           <section className="space-y-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span className="text-xs font-semibold text-slate-800">
                 Jump Directory to Country ({filteredCountries.length})
               </span>
@@ -471,7 +471,7 @@ export const GlobalPulseModal: React.FC<GlobalPulseModalProps> = ({
                 value={countrySearch}
                 onChange={(e) => setCountrySearch(e.target.value)}
                 placeholder="Filter country or +code..."
-                className="h-7 w-44 px-2.5 text-xs bg-slate-50 border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-600"
+                className="h-9 sm:h-7 w-full sm:w-48 px-2.5 text-xs bg-slate-50 border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-600"
               />
             </div>
 

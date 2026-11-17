@@ -146,7 +146,7 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
   }, [selectedJob, rejectionsPage]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5">
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5 pb-16 md:pb-6">
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
         <div>
           <h1 className="text-base sm:text-xl font-semibold text-slate-900">
@@ -171,7 +171,7 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
                 type="text"
                 value={sourceLabel}
                 onChange={(e) => setSourceLabel(e.target.value)}
-                className="w-full h-9 px-3 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                className="w-full h-10 sm:h-9 px-3 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
               />
             </div>
 
@@ -183,7 +183,7 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
                 id="ingest-country"
                 value={defaultCountry}
                 onChange={(e) => setDefaultCountry(e.target.value)}
-                className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                className="w-full h-10 sm:h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
               >
                 {INGEST_COUNTRY_OPTIONS.map((c) => (
                   <option key={c.iso2} value={c.iso2}>

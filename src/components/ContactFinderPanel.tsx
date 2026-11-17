@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
+  AtSign,
   Award,
   Briefcase,
+  Cake,
   Car,
   Check,
   CheckCircle2,
   Copy,
+  DollarSign,
   ExternalLink,
   FileSearch,
   Globe,
@@ -14,7 +18,9 @@ import {
   Mail,
   MapPin,
   Phone,
+  Scale,
   Search,
+  Share2,
   ShieldAlert,
   ShieldCheck,
   User,
@@ -25,6 +31,7 @@ import type {
   ParsedNumberIntelligence,
   PeopleSearchResponse,
   PhoneNumberRecord,
+  SocialPlatformCategory,
 } from '../shared/types.ts';
 import { copyTextToClipboard } from '../utils/clipboard.ts';
 import { formatDirectoryFullName } from '../utils/formatters.ts';
@@ -43,6 +50,17 @@ const PEOPLE_PAGE_SIZE = 500;
 const ASSOCIATES_PAGE_SIZE = 10;
 const MENTIONS_PAGE_SIZE = 10;
 const BATCH_PAGE_SIZE = 50;
+
+const SOCIAL_CATEGORY_TABS: Array<'All' | SocialPlatformCategory> = [
+  'All',
+  'Social',
+  'Professional',
+  'Creator & Media',
+  'Messaging',
+  'Payments',
+  'Developer & Tech',
+  'Community',
+];
 
 const US_STATE_OPTIONS: Array<{ code: string; name: string }> = [
   { code: 'AL', name: 'Alabama (AL)' },
@@ -151,14 +169,18 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
     finderUrlState?.subMode ?? 'phone'
   );
 
-  // Reverse Phone Lookup State
+  // Reverse Phone & Reverse Email Lookup State
   const [phoneInput, setPhoneInput] = useState(finderUrlState?.phoneQuery ?? '');
+  const [emailInput, setEmailInput] = useState(finderUrlState?.emailQuery ?? '');
   const [defaultCountry, setDefaultCountry] = useState(
     finderUrlState?.country ?? 'US'
   );
   const [isLookingUpPhone, setIsLookingUpPhone] = useState(false);
+  const [isLookingUpEmail, setIsLookingUpEmail] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [report, setReport] = useState<ContactFinderReport | null>(null);
+  const [socialCategory, setSocialCategory] = useState<'All' | SocialPlatformCategory>('All');
 
   // Pagination inside Dossier
   const [associatesPage, setAssociatesPage] = useState(1);
@@ -198,6 +220,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
       onFinderUrlStateChange?.({
         subMode,
         phoneQuery: phoneInput,
+        emailQuery: emailInput,
         firstName,
         lastName,
         city,
@@ -210,6 +233,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
     [
       city,
       defaultCountry,
+      emailInput,
       firstName,
       lastName,
       onFinderUrlStateChange,
@@ -245,12 +269,15 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
       setPhoneInput(trimmed);
       setIsLookingUpPhone(true);
       setPhoneError(null);
+      setEmailError(null);
       setAssociatesPage(1);
       setMentionsPage(1);
+      setSocialCategory('All');
 
       onFinderUrlStateChange?.({
         subMode: 'phone',
         phoneQuery: trimmed,
+        emailQuery: emailInput,
         firstName,
         lastName,
         city,
@@ -278,6 +305,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
             onFinderUrlStateChange?.({
               subMode: 'phone',
               phoneQuery: resolvedReport.intel.e164,
+              emailQuery: emailInput,
               firstName,
               lastName,
               city,
@@ -297,10 +325,69 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
     [
       city,
       defaultCountry,
+      emailInput,
       firstName,
       lastName,
       onFinderUrlStateChange,
       onNewRecordsDiscovered,
+      postalCode,
+      stateCode,
+    ]
+  );
+
+  const runEmailLookup = useCallback(
+    async (targetEmail: string) => {
+      const trimmed = targetEmail.trim().toLowerCase();
+      if (!trimmed) return;
+      setSubModeState('email');
+      setEmailInput(trimmed);
+      setIsLookingUpEmail(true);
+      setEmailError(null);
+      setPhoneError(null);
+      setAssociatesPage(1);
+      setMentionsPage(1);
+      setSocialCategory('All');
+
+      onFinderUrlStateChange?.({
+        subMode: 'email',
+        phoneQuery: phoneInput,
+        emailQuery: trimmed,
+        firstName,
+        lastName,
+        city,
+        state: stateCode,
+        zip: postalCode,
+        country: defaultCountry,
+      });
+
+      try {
+        const res = await fetch('/api/contact-finder/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: trimmed }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setEmailError(data.error || 'Could not look up that email address.');
+        } else {
+          const resolvedReport = data as ContactFinderReport;
+          setReport(resolvedReport);
+          onNewRecordsDiscovered?.();
+        }
+      } catch {
+        setEmailError('Network error while running reverse email lookup.');
+      } finally {
+        setIsLookingUpEmail(false);
+      }
+    },
+    [
+      city,
+      defaultCountry,
+      firstName,
+      lastName,
+      onFinderUrlStateChange,
+      onNewRecordsDiscovered,
+      phoneInput,
       postalCode,
       stateCode,
     ]
@@ -364,7 +451,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
     }
   }, [initialPhone, onClearInitialPhone, runPhoneLookup]);
 
-  // Execute deep-linked URL lookup on initial mount if URL contained a phone or people search
+  // Execute deep-linked URL lookup on initial mount if URL contained a phone, email, or people search
   useEffect(() => {
     if (didBootUrlLookupRef.current) return;
     didBootUrlLookupRef.current = true;
@@ -372,6 +459,8 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
 
     if (finderUrlState?.subMode === 'phone' && finderUrlState.phoneQuery.trim()) {
       runPhoneLookup(finderUrlState.phoneQuery.trim(), finderUrlState.country);
+    } else if (finderUrlState?.subMode === 'email' && finderUrlState.emailQuery.trim()) {
+      runEmailLookup(finderUrlState.emailQuery.trim());
     } else if (
       finderUrlState?.subMode === 'people' &&
       (finderUrlState.firstName.trim() ||
@@ -389,7 +478,13 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
         country: finderUrlState.country,
       });
     }
-  }, [executePeopleSearchRequest, finderUrlState, initialPhone, runPhoneLookup]);
+  }, [
+    executePeopleSearchRequest,
+    finderUrlState,
+    initialPhone,
+    runEmailLookup,
+    runPhoneLookup,
+  ]);
 
   const handlePeopleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -503,21 +598,31 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
     return batchResults.slice(start, start + BATCH_PAGE_SIZE);
   }, [batchResults, batchPage]);
 
+  const filteredSocialProfiles = useMemo(() => {
+    if (!report) return [];
+    if (socialCategory === 'All') return report.socialProfiles;
+    return report.socialProfiles.filter((sp) => sp.category === socialCategory);
+  }, [report, socialCategory]);
+
+  const isDossierMode = subMode === 'phone' || subMode === 'email';
+  const isLookingUpDossier = isLookingUpPhone || isLookingUpEmail;
+  const activeDossierError = subMode === 'email' ? emailError : phoneError;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5 pb-16 md:pb-6">
       <div className="max-w-6xl mx-auto space-y-4">
         {/* Session Header & Mode Switcher */}
-        <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="space-y-0.5 max-w-2xl">
             <h1 className="text-base sm:text-lg font-semibold text-slate-900">
               Worldwide Contact Finder &amp; US People Intelligence
             </h1>
             <p className="text-xs text-slate-600">
-              Search any US First &amp; Last Name to list all matching individuals across all 50 states, or reverse-lookup any worldwide phone number for owner identity, last 10 addresses with county, career, emails, vehicles, and relatives.
+              Search by Phone Number, Email Address, or US First &amp; Last Name for full owner profile, exact DOB, 28+ social media accounts, last 10 addresses with county, career, vehicles, relatives, and public records.
             </p>
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg overflow-x-auto shrink-0">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg shrink-0">
             <button
               type="button"
               onClick={() => setSubMode('phone')}
@@ -528,6 +633,17 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
               }`}
             >
               Reverse Phone
+            </button>
+            <button
+              type="button"
+              onClick={() => setSubMode('email')}
+              className={`px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                subMode === 'email'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Reverse Email
             </button>
             <button
               type="button"
@@ -554,79 +670,126 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
           </div>
         </div>
 
-        {/* SUB-MODE 1: REVERSE PHONE LOOKUP DOSSIER (NO SAMPLE NUMBERS) */}
-        {subMode === 'phone' && (
+        {/* SUB-MODE 1 & 2: REVERSE PHONE OR REVERSE EMAIL LOOKUP FORM + SHARED FULL DOSSIER */}
+        {isDossierMode && (
           <div className="space-y-4">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                runPhoneLookup(phoneInput, defaultCountry);
-              }}
-              className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4"
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
-                <div className="sm:col-span-6 lg:col-span-7 space-y-1">
-                  <label
-                    htmlFor="finder-phone-input"
-                    className="block text-xs font-semibold text-slate-700"
-                  >
-                    Phone Number (US or Any Country Worldwide)
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      id="finder-phone-input"
-                      type="text"
-                      value={phoneInput}
-                      onChange={(e) => setPhoneInput(e.target.value)}
-                      placeholder="Enter any US or global phone number (e.g. +1 310... or +41 79...)"
-                      className="w-full h-10 pl-9 pr-3 text-sm font-mono bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-sky-600"
-                    />
+            {subMode === 'phone' ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  runPhoneLookup(phoneInput, defaultCountry);
+                }}
+                className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  <div className="sm:col-span-6 lg:col-span-7 space-y-1">
+                    <label
+                      htmlFor="finder-phone-input"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Phone Number (US or Any Country Worldwide)
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        id="finder-phone-input"
+                        type="text"
+                        inputMode="tel"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value)}
+                        placeholder="Enter any US or global phone number (e.g. +1 310... or +41 79...)"
+                        className="w-full h-10 pl-9 pr-3 text-sm font-mono bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-sky-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-3 lg:col-span-3 space-y-1">
+                    <label
+                      htmlFor="finder-country-select"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Default Country
+                    </label>
+                    <select
+                      id="finder-country-select"
+                      value={defaultCountry}
+                      onChange={(e) => setDefaultCountry(e.target.value)}
+                      className="w-full h-10 px-2.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                    >
+                      {GLOBAL_COUNTRY_OPTIONS.map((c) => (
+                        <option key={c.iso2} value={c.iso2}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-3 lg:col-span-2">
+                    <button
+                      type="submit"
+                      disabled={isLookingUpDossier || !phoneInput.trim()}
+                      className="w-full h-10 px-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 disabled:opacity-50 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span>{isLookingUpPhone ? 'Searching...' : 'Search'}</span>
+                    </button>
                   </div>
                 </div>
+              </form>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  runEmailLookup(emailInput);
+                }}
+                className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  <div className="sm:col-span-9 lg:col-span-10 space-y-1">
+                    <label
+                      htmlFor="finder-email-input"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Email Address (Work, Personal, Academic, or Public Registry Email)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        id="finder-email-input"
+                        type="email"
+                        inputMode="email"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        value={emailInput}
+                        onChange={(e) => setEmailInput(e.target.value)}
+                        placeholder="Enter any email address (e.g. robert.smith@gmail.com or dr.vance@hospital.org)"
+                        className="w-full h-10 pl-9 pr-3 text-sm font-mono bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-sky-600"
+                      />
+                    </div>
+                  </div>
 
-                <div className="sm:col-span-3 lg:col-span-3 space-y-1">
-                  <label
-                    htmlFor="finder-country-select"
-                    className="block text-xs font-semibold text-slate-700"
-                  >
-                    Default Country
-                  </label>
-                  <select
-                    id="finder-country-select"
-                    value={defaultCountry}
-                    onChange={(e) => setDefaultCountry(e.target.value)}
-                    className="w-full h-10 px-2.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
-                  >
-                    {GLOBAL_COUNTRY_OPTIONS.map((c) => (
-                      <option key={c.iso2} value={c.iso2}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="sm:col-span-3 lg:col-span-2">
+                    <button
+                      type="submit"
+                      disabled={isLookingUpDossier || !emailInput.trim()}
+                      className="w-full h-10 px-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 disabled:opacity-50 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span>{isLookingUpEmail ? 'Searching...' : 'Lookup Email'}</span>
+                    </button>
+                  </div>
                 </div>
+              </form>
+            )}
 
-                <div className="sm:col-span-3 lg:col-span-2">
-                  <button
-                    type="submit"
-                    disabled={isLookingUpPhone || !phoneInput.trim()}
-                    className="w-full h-10 px-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 disabled:opacity-50 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                    <span>{isLookingUpPhone ? 'Searching...' : 'Search'}</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            {phoneError && (
+            {activeDossierError && (
               <div className="p-3.5 bg-white border border-red-200 rounded-lg text-xs text-red-700 font-medium">
-                {phoneError}
+                {activeDossierError}
               </div>
             )}
 
-            {isLookingUpPhone && (
-              <div className="bg-white border border-slate-200 rounded-lg p-6 space-y-4 animate-pulse">
+            {isLookingUpDossier && (
+              <div className="bg-white border border-slate-200 rounded-lg p-5 sm:p-6 space-y-4 animate-pulse">
                 <div className="h-5 w-64 bg-slate-200 rounded" />
                 <div className="h-4 w-80 max-w-full bg-slate-100 rounded" />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -637,11 +800,11 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
               </div>
             )}
 
-            {!isLookingUpPhone && report && (
+            {!isLookingUpDossier && report && (
               <div className="space-y-4">
                 {/* 1. Existence & Verification Banner + Small Icon-Only Copy Buttons */}
                 <div
-                  className={`border rounded-lg p-3.5 sm:p-4 flex items-start justify-between gap-3 ${
+                  className={`border rounded-lg p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3 ${
                     report.existenceStatus === 'CONFIRMED_PUBLIC_RECORD'
                       ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
                       : report.existenceStatus === 'VALID_ALLOCATED_EXCHANGE'
@@ -658,16 +821,22 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                       <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5 text-rose-700 shrink-0 mt-0.5" />
                     )}
                     <div className="space-y-0.5 min-w-0">
-                      <div className="text-xs sm:text-sm font-semibold">
+                      <div className="text-xs sm:text-sm font-semibold break-words">
                         {report.existenceStatus === 'INVALID_OR_UNASSIGNED'
-                          ? 'Invalid or Unassigned Number'
-                          : 'Active Phone Line · Comprehensive Worldwide Dossier Ready'}
+                          ? report.queryEmail
+                            ? `Invalid Email Format: ${report.queryEmail}`
+                            : 'Invalid or Unassigned Number'
+                          : report.queryEmail
+                            ? `Resolved Profile for ${report.queryEmail}`
+                            : 'Active Phone Line · Comprehensive Worldwide Dossier Ready'}
                       </div>
-                      <p className="text-[11px] sm:text-xs opacity-90">{report.existenceSummary}</p>
+                      <p className="text-[11px] sm:text-xs opacity-90 break-words">
+                        {report.existenceSummary}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-start">
                     {report.primaryOwner?.name && (
                       <button
                         type="button"
@@ -706,18 +875,18 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
 
                 {report.primaryOwner && (
                   <>
-                    {/* 2. Top Two-Column Dossier: Individual Identity & Credentials + Telecom Network & Lines */}
+                    {/* 2. Top Two-Column Dossier: Individual Identity & Exact DOB + Telecom Network & Lines */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-                      {/* Left Card: Owner Identity, Age, Aliases, Education & Licenses (SHOWS FULL CREDENTIALS LIKE Pharm.D., DDS) */}
-                      <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3.5">
+                      {/* Left Card: Owner Identity, Exact Date of Birth, Aliases, Education & Licenses */}
+                      <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3.5">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                           <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-sky-700" />
+                            <User className="w-4 h-4 text-sky-700 shrink-0" />
                             <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
-                              Individual Identity, Age &amp; Credentials
+                              Individual Identity, Exact DOB &amp; Credentials
                             </h2>
                           </div>
-                          <span className="text-[11px] font-mono tabular-nums text-slate-400">
+                          <span className="text-[11px] font-mono tabular-nums text-slate-400 shrink-0">
                             {report.lookupDurationMs} ms
                           </span>
                         </div>
@@ -729,28 +898,50 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                 type="button"
                                 onClick={() => triggerCopy('card-owner-name', report.primaryOwner!.name)}
                                 title={report.primaryOwner.name}
-                                className="text-base sm:text-lg font-semibold text-slate-900 hover:text-sky-700 text-left cursor-pointer"
+                                className="text-base sm:text-lg font-semibold text-slate-900 hover:text-sky-700 text-left break-words cursor-pointer"
                               >
                                 {report.primaryOwner.name}
                               </button>
-                              <div className="text-xs text-slate-600 mt-0.5">
+                              <div className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                                 {report.primaryOwner.age !== null && (
-                                  <>
-                                    <span className="font-semibold text-slate-800">
-                                      Age {report.primaryOwner.age}
-                                    </span>{' '}
-                                    (Born {report.primaryOwner.birthYear}) ·{' '}
-                                  </>
-                                )}
-                                {report.primaryOwner.jobTitle && (
-                                  <span className="font-medium text-sky-800">
-                                    {report.primaryOwner.jobTitle}
+                                  <span className="font-semibold text-slate-800">
+                                    Age {report.primaryOwner.age}
                                   </span>
                                 )}
-                                {report.primaryOwner.employer && (
-                                  <span> at {report.primaryOwner.employer}</span>
+                                {report.primaryOwner.dateOfBirth && (
+                                  <span className="inline-flex items-center gap-1 font-medium text-sky-900 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded">
+                                    <Cake className="w-3 h-3 text-sky-700 shrink-0" />
+                                    <span>DOB: {report.primaryOwner.dateOfBirth}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        triggerCopy('dob-pill', report.primaryOwner!.dateOfBirth!)
+                                      }
+                                      title={report.primaryOwner.dateOfBirth}
+                                      aria-label="Date of birth"
+                                      className="ml-0.5 inline-flex items-center justify-center text-sky-700 hover:text-sky-950 cursor-pointer"
+                                    >
+                                      {copiedToken === 'dob-pill' ? (
+                                        <Check className="w-3 h-3 text-emerald-700" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </span>
                                 )}
                               </div>
+                              {(report.primaryOwner.jobTitle || report.primaryOwner.employer) && (
+                                <div className="text-xs text-slate-600 mt-1 break-words">
+                                  {report.primaryOwner.jobTitle && (
+                                    <span className="font-medium text-sky-800">
+                                      {report.primaryOwner.jobTitle}
+                                    </span>
+                                  )}
+                                  {report.primaryOwner.employer && (
+                                    <span> at {report.primaryOwner.employer}</span>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             <button
@@ -769,55 +960,78 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                           </div>
 
                           <dl className="divide-y divide-slate-100 border-t border-b border-slate-200">
+                            {report.primaryOwner.dateOfBirth && (
+                              <div className="py-2 flex items-start justify-between gap-3">
+                                <dt className="text-slate-500 shrink-0">Exact Date of Birth</dt>
+                                <dd className="text-slate-900 font-semibold text-right min-w-0 break-words">
+                                  {report.primaryOwner.dateOfBirth}
+                                  {report.primaryOwner.dateOfBirthIso ? (
+                                    <span className="ml-1.5 font-mono text-[11px] font-normal text-slate-500">
+                                      ({report.primaryOwner.dateOfBirthIso})
+                                    </span>
+                                  ) : null}
+                                </dd>
+                              </div>
+                            )}
+                            {(report.primaryOwner.zodiacSign || report.primaryOwner.birthPlace) && (
+                              <div className="py-2 flex items-start justify-between gap-3">
+                                <dt className="text-slate-500 shrink-0">Birth Sign &amp; Origin</dt>
+                                <dd className="text-slate-800 text-right min-w-0 break-words">
+                                  {[report.primaryOwner.zodiacSign, report.primaryOwner.birthPlace]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </dd>
+                              </div>
+                            )}
                             {report.primaryOwner.aliases.length > 0 && (
-                              <div className="py-2 flex items-center justify-between gap-3">
+                              <div className="py-2 flex items-start justify-between gap-3">
                                 <dt className="text-slate-500 shrink-0">Known Aliases</dt>
-                                <dd className="text-slate-900 font-medium text-right">
+                                <dd className="text-slate-900 font-medium text-right min-w-0 break-words">
                                   {report.primaryOwner.aliases.join(' · ')}
                                 </dd>
                               </div>
                             )}
                             {report.primaryOwner.employer && (
-                              <div className="py-2 flex items-center justify-between gap-3">
+                              <div className="py-2 flex items-start justify-between gap-3">
                                 <dt className="text-slate-500 shrink-0">Current Employer</dt>
-                                <dd className="font-semibold text-slate-900 text-right">
+                                <dd className="font-semibold text-slate-900 text-right min-w-0 break-words">
                                   {report.primaryOwner.employer}
                                 </dd>
                               </div>
                             )}
                             {report.primaryOwner.jobTitle && (
-                              <div className="py-2 flex items-center justify-between gap-3">
+                              <div className="py-2 flex items-start justify-between gap-3">
                                 <dt className="text-slate-500 shrink-0">Current Job Title</dt>
-                                <dd className="font-medium text-slate-900 text-right">
+                                <dd className="font-medium text-slate-900 text-right min-w-0 break-words">
                                   {report.primaryOwner.jobTitle}
                                 </dd>
                               </div>
                             )}
                             {report.educationHistory.map((edu, idx) => (
-                              <div key={idx} className="py-2 flex items-center justify-between gap-3">
+                              <div key={idx} className="py-2 flex items-start justify-between gap-3">
                                 <dt className="text-slate-500 inline-flex items-center gap-1.5 shrink-0">
                                   <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
                                   <span>Education</span>
                                 </dt>
-                                <dd className="text-slate-900 text-right">
+                                <dd className="text-slate-900 text-right min-w-0 break-words">
                                   {edu.degreeOrCredential} · {edu.institution} ({edu.graduationYear})
                                 </dd>
                               </div>
                             ))}
                             {report.professionalLicenses.map((lic, idx) => (
-                              <div key={idx} className="py-2 flex items-center justify-between gap-3">
+                              <div key={idx} className="py-2 flex items-start justify-between gap-3">
                                 <dt className="text-slate-500 inline-flex items-center gap-1.5 shrink-0">
                                   <Award className="w-3.5 h-3.5 text-slate-400" />
                                   <span>{lic.licenseType}</span>
                                 </dt>
-                                <dd className="font-mono tabular-nums text-slate-900 text-right">
+                                <dd className="font-mono tabular-nums text-slate-900 text-right min-w-0 break-words">
                                   {lic.licenseNumber} ({lic.status})
                                 </dd>
                               </div>
                             ))}
-                            <div className="py-2 flex items-center justify-between gap-3">
+                            <div className="py-2 flex items-start justify-between gap-3">
                               <dt className="text-slate-500 shrink-0">Primary Source</dt>
-                              <dd className="text-slate-800 text-right">
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
                                 {report.primaryOwner.verificationSource}
                               </dd>
                             </div>
@@ -936,15 +1150,65 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                         </span>
                       </div>
 
-                      <div className="overflow-x-auto">
+                      {/* Desktop Table (md+) & Mobile Cards (< md) for Career History */}
+                      <div className="md:hidden divide-y divide-slate-100">
+                        {report.employmentHistory.map((emp, idx) => {
+                          const tok = `emp-${idx}`;
+                          return (
+                            <div key={idx} className="p-3.5 space-y-1 text-xs">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-slate-900 break-words">
+                                    {emp.jobTitle}
+                                    {emp.status === 'Current' && (
+                                      <span className="ml-1.5 text-[11px] font-medium text-emerald-700">
+                                        · Current
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="font-medium text-sky-800 break-words">
+                                    {emp.employer}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    triggerCopy(tok, `${emp.jobTitle} at ${emp.employer}`)
+                                  }
+                                  title={`${emp.jobTitle} at ${emp.employer}`}
+                                  aria-label={`${emp.jobTitle} at ${emp.employer}`}
+                                  className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                >
+                                  {copiedToken === tok ? (
+                                    <Check className="w-3 h-3 text-emerald-700" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                              <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-x-2">
+                                <span className="font-mono tabular-nums font-medium text-slate-700">
+                                  {emp.years}
+                                </span>
+                                <span>·</span>
+                                <span>{emp.location}</span>
+                                <span>·</span>
+                                <span>{emp.departmentOrSpecialty}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead className="bg-slate-100 border-b border-slate-200 text-slate-700">
                             <tr>
                               <th className="py-2 px-3.5 font-semibold">Job Title</th>
                               <th className="py-2 px-3.5 font-semibold">Employer / Organization</th>
-                              <th className="py-2 px-3.5 font-semibold hidden md:table-cell">Department / Industry</th>
+                              <th className="py-2 px-3.5 font-semibold hidden lg:table-cell">Department / Industry</th>
                               <th className="py-2 px-3.5 font-semibold">Tenure</th>
-                              <th className="py-2 px-3.5 font-semibold hidden sm:table-cell">Location</th>
+                              <th className="py-2 px-3.5 font-semibold">Location</th>
                               <th className="py-2 px-3 font-semibold w-9 text-right">
                                 <span className="sr-only">Action</span>
                               </th>
@@ -966,13 +1230,13 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                   <td className="py-2 px-3.5 font-medium text-slate-900">
                                     {emp.employer}
                                   </td>
-                                  <td className="py-2 px-3.5 text-slate-600 hidden md:table-cell">
+                                  <td className="py-2 px-3.5 text-slate-600 hidden lg:table-cell">
                                     {emp.departmentOrSpecialty} · {emp.industry}
                                   </td>
                                   <td className="py-2 px-3.5 font-mono tabular-nums text-slate-700 whitespace-nowrap">
                                     {emp.years}
                                   </td>
-                                  <td className="py-2 px-3.5 text-slate-600 whitespace-nowrap hidden sm:table-cell">
+                                  <td className="py-2 px-3.5 text-slate-600 whitespace-nowrap">
                                     {emp.location}
                                   </td>
                                   <td className="py-2 px-3 text-right">
@@ -1002,11 +1266,11 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
 
                     {/* 4. Email Addresses + Property & Residence Intelligence */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-                      {/* Left: Email Addresses + Social/Web Profiles */}
-                      <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3.5">
+                      {/* Left: Email Addresses (Click Email to Pivot or Icon to Copy) */}
+                      <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3.5">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                           <div className="flex items-center gap-2">
-                            <Mail className="w-4 h-4 text-sky-700" />
+                            <Mail className="w-4 h-4 text-sky-700 shrink-0" />
                             <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
                               Email Addresses ({report.emails.length})
                             </h2>
@@ -1039,28 +1303,226 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                             return (
                               <div
                                 key={em.address}
-                                className="py-2 flex items-center justify-between gap-2 text-xs"
+                                className="py-2.5 flex items-center justify-between gap-2 text-xs"
                               >
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <button
                                     type="button"
                                     onClick={() => triggerCopy(tok, em.address)}
-                                    className="font-mono font-semibold text-slate-900 hover:text-sky-700 truncate block max-w-full cursor-pointer"
+                                    className="font-mono font-semibold text-slate-900 hover:text-sky-700 break-all text-left cursor-pointer"
                                   >
                                     {em.address}
                                   </button>
-                                  <div className="text-[11px] text-slate-500 truncate">
+                                  <div className="text-[11px] text-slate-500 break-words">
                                     {em.type} · {em.confidenceNote}
                                   </div>
                                 </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => runEmailLookup(em.address)}
+                                    title={`Reverse lookup ${em.address}`}
+                                    aria-label={`Reverse lookup ${em.address}`}
+                                    className="w-6 h-6 inline-flex items-center justify-center text-sky-700 hover:text-sky-950 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded transition-colors cursor-pointer"
+                                  >
+                                    <Search className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => triggerCopy(tok, em.address)}
+                                    title={em.address}
+                                    aria-label={em.address}
+                                    className="w-6 h-6 inline-flex items-center justify-center text-slate-600 hover:text-sky-800 bg-slate-50 hover:bg-sky-50 border border-slate-200 rounded transition-colors cursor-pointer"
+                                  >
+                                    {copiedToken === tok ? (
+                                      <Check className="w-3 h-3 text-emerald-700" />
+                                    ) : (
+                                      <Copy className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Right: Property, Home Value & Neighborhood Intelligence */}
+                      {report.propertyProfile && (
+                        <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3.5">
+                          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Home className="w-4 h-4 text-sky-700 shrink-0" />
+                              <h2 className="text-xs sm:text-sm font-semibold text-slate-900 truncate">
+                                Property, Residence &amp; Local Intelligence
+                              </h2>
+                            </div>
+                            <span className="text-[11px] text-slate-500 shrink-0">
+                              {report.propertyProfile.ownershipStatus}
+                            </span>
+                          </div>
+
+                          <dl className="divide-y divide-slate-100 border-t border-b border-slate-200 text-xs">
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Property Type</dt>
+                              <dd className="font-semibold text-slate-900 text-right min-w-0 break-words">
+                                {report.propertyProfile.propertyType}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Estimated Value</dt>
+                              <dd className="font-mono tabular-nums font-semibold text-emerald-800 text-right">
+                                {report.propertyProfile.estimatedValue}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Size &amp; Year Built</dt>
+                              <dd className="font-mono tabular-nums text-slate-900 text-right">
+                                {report.propertyProfile.livingAreaSqFt} · Built{' '}
+                                {report.propertyProfile.yearBuilt}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Residence Length</dt>
+                              <dd className="text-slate-900 font-medium text-right">
+                                {report.propertyProfile.lengthOfResidence}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">County / District</dt>
+                              <dd className="text-slate-900 text-right min-w-0 break-words">
+                                {report.propertyProfile.countyOrDistrict}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Local Timezone</dt>
+                              <dd className="font-mono text-slate-800 text-right min-w-0 break-words">
+                                {report.propertyProfile.localTimezone}
+                              </dd>
+                            </div>
+                            {report.propertyProfile.coordinates && (
+                              <div className="py-2 flex items-start justify-between gap-3">
+                                <dt className="text-slate-500 shrink-0">Geo Coordinates</dt>
+                                <dd className="font-mono tabular-nums text-slate-800 text-right">
+                                  {report.propertyProfile.coordinates}
+                                </dd>
+                              </div>
+                            )}
+                          </dl>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 4B. ALL SOCIAL MEDIA & DIGITAL ACCOUNTS DIRECTORY (28+ PLATFORMS) */}
+                    {report.socialProfiles.length > 0 && (
+                      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                        <div className="px-3.5 sm:px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Share2 className="w-4 h-4 text-sky-700 shrink-0" />
+                            <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
+                              All Social Media &amp; Digital Profiles ({report.socialProfiles.length})
+                            </h2>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              triggerCopy(
+                                'copy-all-socials',
+                                report.socialProfiles
+                                  .map((s) => `${s.platform}: ${s.handle} (${s.url})`)
+                                  .join('\n')
+                              )
+                            }
+                            title={`All ${report.socialProfiles.length} social handles`}
+                            aria-label="All social handles"
+                            className="w-7 h-7 inline-flex items-center justify-center text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded transition-colors shrink-0 cursor-pointer"
+                          >
+                            {copiedToken === 'copy-all-socials' ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-700" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5 text-sky-700" />
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="px-3.5 sm:px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto">
+                          {SOCIAL_CATEGORY_TABS.map((cat) => {
+                            const active = socialCategory === cat;
+                            const count =
+                              cat === 'All'
+                                ? report.socialProfiles.length
+                                : report.socialProfiles.filter((sp) => sp.category === cat).length;
+                            if (cat !== 'All' && count === 0) return null;
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setSocialCategory(cat)}
+                                className={`px-2.5 py-1 text-[11px] font-medium rounded border whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                                  active
+                                    ? 'bg-slate-900 text-white border-slate-900'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-100'
+                                }`}
+                              >
+                                {cat} ({count})
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                          {filteredSocialProfiles.map((sp, idx) => {
+                            const spTok = `social-${sp.platform}-${idx}`;
+                            return (
+                              <div
+                                key={`${sp.platform}-${sp.url}-${idx}`}
+                                className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white transition-colors flex items-start justify-between gap-2 text-xs"
+                              >
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-slate-900">
+                                      {sp.platform}
+                                    </span>
+                                    <span className="text-[10px] font-medium text-slate-500">
+                                      · {sp.category}
+                                    </span>
+                                    <span
+                                      className={`text-[10px] font-semibold ${
+                                        sp.verified || sp.status === 'Verified Web Match'
+                                          ? 'text-emerald-700'
+                                          : sp.status === 'Active Handle Matched'
+                                            ? 'text-sky-700'
+                                            : 'text-slate-500'
+                                      }`}
+                                    >
+                                      · {sp.status}
+                                    </span>
+                                  </div>
+
+                                  <div className="font-mono text-[11px] text-slate-700 truncate">
+                                    {sp.handle}
+                                  </div>
+
+                                  <a
+                                    href={sp.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[11px] font-medium text-sky-800 hover:text-sky-950 hover:underline inline-flex items-center gap-1 max-w-full"
+                                  >
+                                    <span className="truncate">{sp.label}</span>
+                                    <ExternalLink className="w-3 h-3 shrink-0" />
+                                  </a>
+                                </div>
+
                                 <button
                                   type="button"
-                                  onClick={() => triggerCopy(tok, em.address)}
-                                  title={em.address}
-                                  aria-label={em.address}
-                                  className="w-6 h-6 inline-flex items-center justify-center text-slate-600 hover:text-sky-800 bg-slate-50 hover:bg-sky-50 border border-slate-200 rounded transition-colors shrink-0 cursor-pointer"
+                                  onClick={() => triggerCopy(spTok, `${sp.handle} — ${sp.url}`)}
+                                  title={`${sp.platform}: ${sp.handle}`}
+                                  aria-label={`${sp.platform} handle`}
+                                  className="w-6 h-6 inline-flex items-center justify-center text-slate-600 hover:text-sky-800 bg-white hover:bg-sky-50 border border-slate-200 rounded shrink-0 cursor-pointer"
                                 >
-                                  {copiedToken === tok ? (
+                                  {copiedToken === spTok ? (
                                     <Check className="w-3 h-3 text-emerald-700" />
                                   ) : (
                                     <Copy className="w-3 h-3" />
@@ -1070,102 +1532,8 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                             );
                           })}
                         </div>
-
-                        {report.socialProfiles.length > 0 && (
-                          <div className="space-y-1.5 pt-0.5">
-                            <div className="text-xs font-semibold text-slate-800">
-                              Public Professional &amp; Social Profiles ({report.socialProfiles.length})
-                            </div>
-                            <div className="divide-y divide-slate-100 border-t border-slate-100 text-xs">
-                              {report.socialProfiles.map((sp, idx) => (
-                                <div
-                                  key={`${sp.url}-${idx}`}
-                                  className="py-1.5 flex items-center justify-between gap-3"
-                                >
-                                  <span className="font-medium text-slate-700 shrink-0">
-                                    {sp.platform}
-                                  </span>
-                                  <a
-                                    href={sp.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sky-800 hover:text-sky-950 hover:underline inline-flex items-center gap-1 truncate"
-                                  >
-                                    <span className="truncate">{sp.label}</span>
-                                    <ExternalLink className="w-3 h-3 shrink-0" />
-                                  </a>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
-
-                      {/* Right: Property, Home Value & Neighborhood Intelligence */}
-                      {report.propertyProfile && (
-                        <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3.5">
-                          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                            <div className="flex items-center gap-2">
-                              <Home className="w-4 h-4 text-sky-700" />
-                              <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
-                                Property, Residence &amp; Local Intelligence
-                              </h2>
-                            </div>
-                            <span className="text-[11px] text-slate-500">
-                              {report.propertyProfile.ownershipStatus}
-                            </span>
-                          </div>
-
-                          <dl className="divide-y divide-slate-100 border-t border-b border-slate-200 text-xs">
-                            <div className="py-2 flex items-center justify-between gap-3">
-                              <dt className="text-slate-500">Property Type</dt>
-                              <dd className="font-semibold text-slate-900 text-right">
-                                {report.propertyProfile.propertyType}
-                              </dd>
-                            </div>
-                            <div className="py-2 flex items-center justify-between gap-3">
-                              <dt className="text-slate-500">Estimated Value</dt>
-                              <dd className="font-mono tabular-nums font-semibold text-emerald-800">
-                                {report.propertyProfile.estimatedValue}
-                              </dd>
-                            </div>
-                            <div className="py-2 flex items-center justify-between gap-3">
-                              <dt className="text-slate-500">Size &amp; Year Built</dt>
-                              <dd className="font-mono tabular-nums text-slate-900">
-                                {report.propertyProfile.livingAreaSqFt} · Built{' '}
-                                {report.propertyProfile.yearBuilt}
-                              </dd>
-                            </div>
-                            <div className="py-2 flex items-center justify-between gap-3">
-                              <dt className="text-slate-500">Residence Length</dt>
-                              <dd className="text-slate-900 font-medium">
-                                {report.propertyProfile.lengthOfResidence}
-                              </dd>
-                            </div>
-                            <div className="py-2 flex items-center justify-between gap-3">
-                              <dt className="text-slate-500">Metro / District</dt>
-                              <dd className="text-slate-900 text-right">
-                                {report.propertyProfile.countyOrDistrict}
-                              </dd>
-                            </div>
-                            <div className="py-2 flex items-center justify-between gap-3">
-                              <dt className="text-slate-500">Local Timezone</dt>
-                              <dd className="font-mono text-slate-800">
-                                {report.propertyProfile.localTimezone}
-                              </dd>
-                            </div>
-                            {report.propertyProfile.coordinates && (
-                              <div className="py-2 flex items-center justify-between gap-3">
-                                <dt className="text-slate-500">Geo Coordinates</dt>
-                                <dd className="font-mono tabular-nums text-slate-800">
-                                  {report.propertyProfile.coordinates}
-                                </dd>
-                              </div>
-                            )}
-                          </dl>
-                        </div>
-                      )}
-                    </div>
+                    )}
 
                     {/* 5. LAST 10 ADDRESSES — Complete Chronological Address History with Dedicated County Column */}
                     <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -1205,7 +1573,72 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                         </button>
                       </div>
 
-                      <div className="overflow-x-auto">
+                      {/* Mobile Cards (< md) for Last 10 Addresses (With Prominent County) */}
+                      <div className="md:hidden divide-y divide-slate-100">
+                        {report.addresses.map((addr) => {
+                          const fullLine = `${addr.street}${
+                            addr.unit ? `, ${addr.unit}` : ''
+                          }, ${addr.city}, ${addr.state} ${addr.postalCode}${
+                            addr.county ? `, ${addr.county}` : ''
+                          }, ${addr.country}`;
+                          const tok = `addr-row-${addr.index}`;
+                          return (
+                            <div key={addr.index} className="p-3.5 space-y-1 text-xs">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-mono tabular-nums text-slate-400">
+                                      #{String(addr.index).padStart(2, '0')}
+                                    </span>
+                                    <span
+                                      className={`font-semibold ${
+                                        addr.index === 1 ? 'text-emerald-800' : 'text-sky-800'
+                                      }`}
+                                    >
+                                      {addr.label}
+                                    </span>
+                                    <span className="font-mono tabular-nums text-[11px] text-slate-500">
+                                      · {addr.yearsActive}
+                                    </span>
+                                  </div>
+                                  <div className="font-semibold text-slate-900 mt-0.5 break-words">
+                                    {addr.street}
+                                    {addr.unit ? `, ${addr.unit}` : ''}
+                                  </div>
+                                  <div className="text-slate-700">
+                                    {addr.city}, {addr.state}{' '}
+                                    <span className="font-mono tabular-nums font-medium text-sky-800">
+                                      {addr.postalCode}
+                                    </span>{' '}
+                                    <span className="text-slate-400">· {addr.country}</span>
+                                  </div>
+                                  {addr.county && (
+                                    <div className="text-[11px] font-medium text-slate-800 mt-0.5">
+                                      County: {addr.county}
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => triggerCopy(tok, fullLine)}
+                                  title={fullLine}
+                                  aria-label={fullLine}
+                                  className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                >
+                                  {copiedToken === tok ? (
+                                    <Check className="w-3 h-3 text-emerald-700" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Desktop Table (md+) */}
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead className="bg-slate-100 border-b border-slate-200 text-slate-700">
                             <tr>
@@ -1214,7 +1647,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                               <th className="py-2 px-3.5 font-semibold">City, State &amp; ZIP</th>
                               <th className="py-2 px-3.5 font-semibold">County</th>
                               <th className="py-2 px-3.5 font-semibold hidden lg:table-cell">Classification</th>
-                              <th className="py-2 px-3.5 font-semibold hidden sm:table-cell">Years</th>
+                              <th className="py-2 px-3.5 font-semibold">Years</th>
                               <th className="py-2 px-3 font-semibold w-9 text-right">
                                 <span className="sr-only">Action</span>
                               </th>
@@ -1256,7 +1689,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                       <span>{addr.label}</span>
                                     )}
                                   </td>
-                                  <td className="py-2 px-3.5 font-mono tabular-nums text-slate-600 whitespace-nowrap hidden sm:table-cell">
+                                  <td className="py-2 px-3.5 font-mono tabular-nums text-slate-600 whitespace-nowrap">
                                     {addr.yearsActive}
                                   </td>
                                   <td className="py-2 px-3 text-right">
@@ -1296,14 +1729,63 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                         </span>
                       </div>
 
-                      <div className="overflow-x-auto">
+                      {/* Mobile Cards (< md) for Vehicles Owned */}
+                      <div className="md:hidden divide-y divide-slate-100">
+                        {report.vehiclesOwned.map((veh, idx) => {
+                          const tok = `veh-${idx}`;
+                          const vehSummary = `${veh.year} ${veh.make} ${veh.model} (${veh.bodyStyle}) — VIN ${veh.vinMasked} [${veh.registrationState}]`;
+                          return (
+                            <div key={idx} className="p-3.5 space-y-1 text-xs">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-slate-900">
+                                    <span className="font-mono tabular-nums">{veh.year}</span>{' '}
+                                    {veh.make} {veh.model}
+                                  </div>
+                                  <div className="text-[11px] text-slate-600">
+                                    {veh.bodyStyle} · {veh.registrationState} ·{' '}
+                                    <span
+                                      className={
+                                        veh.status === 'Active Registration'
+                                          ? 'font-medium text-emerald-700'
+                                          : 'text-slate-500'
+                                      }
+                                    >
+                                      {veh.status}
+                                    </span>
+                                  </div>
+                                  <div className="font-mono text-[11px] text-slate-700 mt-0.5">
+                                    VIN: {veh.vinMasked}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => triggerCopy(tok, vehSummary)}
+                                  title={vehSummary}
+                                  aria-label={vehSummary}
+                                  className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                >
+                                  {copiedToken === tok ? (
+                                    <Check className="w-3 h-3 text-emerald-700" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Desktop Table (md+) */}
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead className="bg-slate-100 border-b border-slate-200 text-slate-700">
                             <tr>
                               <th className="py-2 px-3.5 font-semibold">Year, Make &amp; Model</th>
-                              <th className="py-2 px-3.5 font-semibold hidden sm:table-cell">Body Style</th>
+                              <th className="py-2 px-3.5 font-semibold">Body Style</th>
                               <th className="py-2 px-3.5 font-semibold">VIN (ISO 3779)</th>
-                              <th className="py-2 px-3.5 font-semibold hidden md:table-cell">Region</th>
+                              <th className="py-2 px-3.5 font-semibold">Region</th>
                               <th className="py-2 px-3.5 font-semibold">Status</th>
                               <th className="py-2 px-3 font-semibold w-9 text-right">
                                 <span className="sr-only">Action</span>
@@ -1320,13 +1802,13 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                     <span className="font-mono tabular-nums">{veh.year}</span>{' '}
                                     {veh.make} {veh.model}
                                   </td>
-                                  <td className="py-2 px-3.5 text-slate-700 hidden sm:table-cell">
+                                  <td className="py-2 px-3.5 text-slate-700">
                                     {veh.bodyStyle}
                                   </td>
                                   <td className="py-2 px-3.5 font-mono tabular-nums text-slate-800">
                                     {veh.vinMasked}
                                   </td>
-                                  <td className="py-2 px-3.5 font-mono text-slate-700 hidden md:table-cell">
+                                  <td className="py-2 px-3.5 font-mono text-slate-700">
                                     {veh.registrationState}
                                   </td>
                                   <td className="py-2 px-3.5 text-slate-600">
@@ -1418,15 +1900,84 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                         )}
                       </div>
 
-                      <div className="overflow-x-auto">
+                      {/* Mobile Cards (< md) for Relatives & Household Members */}
+                      <div className="md:hidden divide-y divide-slate-100">
+                        {report.relatives.map((rel, idx) => {
+                          const nameTok = `rel-name-${idx}`;
+                          const phoneTok = `rel-phone-${idx}`;
+                          return (
+                            <div key={`${rel.phoneE164}-${idx}`} className="p-3.5 space-y-1.5 text-xs">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-slate-900 break-words">
+                                      {rel.name}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => triggerCopy(nameTok, rel.name)}
+                                      title={rel.name}
+                                      aria-label={rel.name}
+                                      className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                    >
+                                      {copiedToken === nameTok ? (
+                                        <Check className="w-3 h-3 text-emerald-700" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                  <div className="text-[11px] text-sky-800 font-medium mt-0.5">
+                                    {rel.relationship} · Age {rel.age}
+                                    {rel.dateOfBirth ? ` (DOB: ${rel.dateOfBirth})` : ''}
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => runPhoneLookup(rel.phoneE164)}
+                                  className="px-2 py-1 text-[11px] font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded shrink-0 cursor-pointer"
+                                >
+                                  Report
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-2 text-[11px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono tabular-nums font-medium text-slate-900">
+                                    {rel.phoneDisplay}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => triggerCopy(phoneTok, rel.phoneE164)}
+                                    title={rel.phoneE164}
+                                    aria-label={rel.phoneE164}
+                                    className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                  >
+                                    {copiedToken === phoneTok ? (
+                                      <Check className="w-3 h-3 text-emerald-700" />
+                                    ) : (
+                                      <Copy className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                                <span className="text-slate-500 truncate">{rel.cityState}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Desktop Table (md+) */}
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead className="bg-slate-100 border-b border-slate-200 text-slate-700">
                             <tr>
                               <th className="py-2 px-3.5 font-semibold">Full Name</th>
-                              <th className="py-2 px-3 font-semibold hidden sm:table-cell">Age</th>
+                              <th className="py-2 px-3 font-semibold">Age &amp; DOB</th>
                               <th className="py-2 px-3.5 font-semibold">Relationship</th>
                               <th className="py-2 px-3.5 font-semibold">Phone Number</th>
-                              <th className="py-2 px-3.5 font-semibold hidden md:table-cell">City &amp; Region</th>
+                              <th className="py-2 px-3.5 font-semibold">City &amp; Region</th>
                               <th className="py-2 px-3.5 font-semibold text-right">Dossier</th>
                             </tr>
                           </thead>
@@ -1461,8 +2012,15 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                       </button>
                                     </div>
                                   </td>
-                                  <td className="py-2 px-3 font-mono tabular-nums text-slate-700 hidden sm:table-cell">
-                                    {rel.age}
+                                  <td className="py-2 px-3 text-slate-700 whitespace-nowrap">
+                                    <span className="font-mono tabular-nums font-medium text-slate-900">
+                                      {rel.age}
+                                    </span>
+                                    {rel.dateOfBirth ? (
+                                      <div className="text-[11px] text-slate-500">
+                                        {rel.dateOfBirth}
+                                      </div>
+                                    ) : null}
                                   </td>
                                   <td className="py-2 px-3.5 text-sky-800 font-medium">
                                     {rel.relationship}
@@ -1492,7 +2050,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                       </button>
                                     </div>
                                   </td>
-                                  <td className="py-2 px-3.5 text-slate-600 hidden md:table-cell">
+                                  <td className="py-2 px-3.5 text-slate-600">
                                     {rel.cityState}
                                   </td>
                                   <td className="py-2 px-3.5 text-right">
@@ -1512,7 +2070,243 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                       </div>
                     </div>
 
-                    {/* 8. Co-Located Contacts & Neighbors / Associates (Paginated) */}
+                    {/* 7B. EXTENDED PUBLIC INTELLIGENCE, ASSETS, COURT, EXPOSURE & DONORS (SPICY INTEL) */}
+                    {report.spicyIntel && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+                        {/* Financial, Income, Deed & Equity */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3">
+                          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                            <DollarSign className="w-4 h-4 text-emerald-700 shrink-0" />
+                            <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
+                              Financial, Income, Deed &amp; Equity Profile
+                            </h2>
+                          </div>
+                          <dl className="divide-y divide-slate-100 text-xs">
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Est. Annual Income</dt>
+                              <dd className="font-mono font-semibold text-slate-900 text-right">
+                                {report.spicyIntel.financialAndProperty.estimatedAnnualIncome}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Estimated Net Worth</dt>
+                              <dd className="font-mono font-semibold text-emerald-800 text-right">
+                                {report.spicyIntel.financialAndProperty.estimatedNetWorth}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Purchasing Power</dt>
+                              <dd className="text-slate-900 font-medium text-right min-w-0 break-words">
+                                {report.spicyIntel.financialAndProperty.purchasingPowerTier}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Deed Recorded / Equity</dt>
+                              <dd className="font-mono text-slate-900 text-right min-w-0 break-words">
+                                {report.spicyIntel.financialAndProperty.propertyDeedYear} ·{' '}
+                                {report.spicyIntel.financialAndProperty.estimatedHomeEquity}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Mortgage &amp; Tax Est.</dt>
+                              <dd className="font-mono text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.financialAndProperty.estimatedMortgageBalance} · Tax{' '}
+                                {report.spicyIntel.financialAndProperty.annualPropertyTax}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Holdings &amp; Assets</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.financialAndProperty.secondaryAssets}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+
+                        {/* Legal, Voter, Court, Liens, Traffic & Permits */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3">
+                          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                            <Scale className="w-4 h-4 text-sky-700 shrink-0" />
+                            <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
+                              Voter Rolls, Court Records, Liens &amp; Permits
+                            </h2>
+                          </div>
+                          <dl className="divide-y divide-slate-100 text-xs">
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Voter Registration</dt>
+                              <dd className="font-medium text-slate-900 text-right min-w-0 break-words">
+                                {report.spicyIntel.legalAndCourt.voterRegistration} ·{' '}
+                                {report.spicyIntel.legalAndCourt.partyAffiliation}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Voting District</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.legalAndCourt.voterDistrict}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Civil &amp; Small Claims</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.legalAndCourt.civilJudgments}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Liens &amp; UCC Filings</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.legalAndCourt.liensAndUcc}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Bankruptcy / Evictions</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.legalAndCourt.bankruptcyHistory} ·{' '}
+                                {report.spicyIntel.legalAndCourt.evictionFilings}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Traffic &amp; Permits</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.legalAndCourt.trafficViolations} ·{' '}
+                                {report.spicyIntel.legalAndCourt.specialtyPermits.join(' · ')}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+
+                        {/* Digital Footprint, Device & Data Exposure Alerts */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3">
+                          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
+                              Digital Exposure Alerts, ISP &amp; Device Footprint
+                            </h2>
+                          </div>
+                          <dl className="divide-y divide-slate-100 text-xs">
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Primary Handles</dt>
+                              <dd className="font-mono text-slate-900 text-right min-w-0 break-words">
+                                {report.spicyIntel.digitalAndExposure.primaryHandles.join(' · ')}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Home ISP &amp; Device</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.digitalAndExposure.homeBroadbandIsp} ·{' '}
+                                {report.spicyIntel.digitalAndExposure.deviceEcosystem}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Gravatar OSINT</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.digitalAndExposure.gravatarStatus}
+                              </dd>
+                            </div>
+                          </dl>
+
+                          {report.spicyIntel.digitalAndExposure.breachAlerts.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              <div className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                                Historical Public Breach Index
+                              </div>
+                              <div className="divide-y divide-slate-100 border border-slate-200 rounded-md">
+                                {report.spicyIntel.digitalAndExposure.breachAlerts.map((br, i) => (
+                                  <div key={i} className="p-2.5 text-xs space-y-0.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-semibold text-slate-900">{br.source}</span>
+                                      <span
+                                        className={`font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                          br.riskLevel === 'High'
+                                            ? 'bg-rose-50 text-rose-700'
+                                            : br.riskLevel === 'Moderate'
+                                              ? 'bg-amber-50 text-amber-800'
+                                              : 'bg-slate-100 text-slate-600'
+                                        }`}
+                                      >
+                                        {br.breachDate} · {br.riskLevel}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-600">
+                                      Exposed: {br.exposedFields}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Former Names, Co-Habitants, Political Donors & Affiliations */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3">
+                          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                            <AtSign className="w-4 h-4 text-sky-700 shrink-0" />
+                            <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
+                              Former Names, Co-Habitants, Donors &amp; Affiliations
+                            </h2>
+                          </div>
+                          <dl className="divide-y divide-slate-100 text-xs">
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Former / Name Variants</dt>
+                              <dd className="text-slate-900 font-medium text-right min-w-0 break-words">
+                                {report.spicyIntel.socialAndAssociatesExtended.formerNames.join(' · ')}
+                              </dd>
+                            </div>
+                            <div className="py-2 flex items-start justify-between gap-3">
+                              <dt className="text-slate-500 shrink-0">Affiliations &amp; Clubs</dt>
+                              <dd className="text-slate-800 text-right min-w-0 break-words">
+                                {report.spicyIntel.socialAndAssociatesExtended.interestsAndAffiliations.join(
+                                  ' · '
+                                )}
+                              </dd>
+                            </div>
+                          </dl>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                            <div className="space-y-1.5">
+                              <div className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                                Past Roommates / Co-Habitants
+                              </div>
+                              <div className="divide-y divide-slate-100 border border-slate-200 rounded-md">
+                                {report.spicyIntel.socialAndAssociatesExtended.roommatesAndCohabitants.map(
+                                  (rm, i) => (
+                                    <div key={i} className="p-2 text-xs">
+                                      <div className="font-semibold text-slate-900">
+                                        {rm.name} ({rm.age})
+                                      </div>
+                                      <div className="text-[11px] text-slate-500">
+                                        {rm.relationNote} · {rm.yearsShared}
+                                      </div>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <div className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                                Donor &amp; Civic Filings
+                              </div>
+                              <div className="divide-y divide-slate-100 border border-slate-200 rounded-md">
+                                {report.spicyIntel.socialAndAssociatesExtended.politicalAndDonorFilings.map(
+                                  (dn, i) => (
+                                    <div key={i} className="p-2 text-xs">
+                                      <div className="font-semibold text-slate-900">
+                                        {dn.recipientOrOrg}
+                                      </div>
+                                      <div className="text-[11px] text-slate-500">
+                                        {dn.amountRange} · {dn.cycle} · {dn.cityState}
+                                      </div>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 8. Co-Located Contacts & Neighbors / Associates (Paginated + Mobile Cards) */}
                     {report.associates.length > 0 && (
                       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
                         <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
@@ -1570,14 +2364,83 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                           )}
                         </div>
 
-                        <div className="overflow-x-auto">
+                        {/* Mobile Cards (< md) */}
+                        <div className="md:hidden divide-y divide-slate-100">
+                          {paginatedAssociates.map(({ record: rec, relationship }) => {
+                            const nameTok = `assoc-name-${rec.id}`;
+                            const phoneTok = `assoc-row-${rec.id}`;
+                            const cleanName = formatDirectoryFullName(rec.ownerName);
+                            return (
+                              <div key={rec.id} className="p-3.5 space-y-1.5 text-xs">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-slate-900 break-words">
+                                        {cleanName}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => triggerCopy(nameTok, cleanName)}
+                                        title={cleanName}
+                                        aria-label={cleanName}
+                                        className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                      >
+                                        {copiedToken === nameTok ? (
+                                          <Check className="w-3 h-3 text-emerald-700" />
+                                        ) : (
+                                          <Copy className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                    </div>
+                                    <div className="text-[11px] text-sky-800 font-medium">
+                                      {relationship}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => runPhoneLookup(rec.e164, rec.countryIso2)}
+                                    className="px-2 py-1 text-[11px] font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded shrink-0 cursor-pointer"
+                                  >
+                                    Report
+                                  </button>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 text-[11px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono tabular-nums font-medium text-slate-900">
+                                      {rec.internationalFormat}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => triggerCopy(phoneTok, rec.e164)}
+                                      title={rec.e164}
+                                      aria-label={rec.e164}
+                                      className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                    >
+                                      {copiedToken === phoneTok ? (
+                                        <Check className="w-3 h-3 text-emerald-700" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                  <span className="text-slate-500 truncate">
+                                    {[rec.city, rec.regionCode, rec.postalCode].filter(Boolean).join(', ')}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Desktop Table (md+) */}
+                        <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-left border-collapse text-xs">
                             <thead className="bg-slate-100 border-b border-slate-200 text-slate-700">
                               <tr>
                                 <th className="py-2 px-3.5 font-semibold">Full Name</th>
-                                <th className="py-2 px-3.5 font-semibold hidden sm:table-cell">Connection</th>
+                                <th className="py-2 px-3.5 font-semibold">Connection</th>
                                 <th className="py-2 px-3.5 font-semibold">Phone Number</th>
-                                <th className="py-2 px-3.5 font-semibold hidden md:table-cell">Address / City</th>
+                                <th className="py-2 px-3.5 font-semibold">Address / City</th>
                                 <th className="py-2 px-3.5 font-semibold text-right">Dossier</th>
                               </tr>
                             </thead>
@@ -1612,7 +2475,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                         </button>
                                       </div>
                                     </td>
-                                    <td className="py-2 px-3.5 text-sky-800 font-medium hidden sm:table-cell">
+                                    <td className="py-2 px-3.5 text-sky-800 font-medium">
                                       {relationship}
                                     </td>
                                     <td className="py-2 px-3.5">
@@ -1639,7 +2502,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                         </button>
                                       </div>
                                     </td>
-                                    <td className="py-2 px-3.5 text-slate-600 hidden md:table-cell">
+                                    <td className="py-2 px-3.5 text-slate-600">
                                       {[rec.streetAddress, rec.city, rec.regionCode, rec.postalCode]
                                         .filter(Boolean)
                                         .join(', ')}
@@ -1744,7 +2607,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="e.g. Robert or Bob"
-                    className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                    className="w-full h-10 sm:h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                   />
                 </div>
 
@@ -1758,7 +2621,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="e.g. Smith"
-                    className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                    className="w-full h-10 sm:h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                   />
                 </div>
 
@@ -1772,7 +2635,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="Any US City"
-                    className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                    className="w-full h-10 sm:h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                   />
                 </div>
 
@@ -1785,7 +2648,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                       id="pf-state"
                       value={stateCode}
                       onChange={(e) => setStateCode(e.target.value)}
-                      className="w-full h-9 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                      className="w-full h-10 sm:h-9 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                     >
                       <option value="">All 50 US States + D.C.</option>
                       {US_STATE_OPTIONS.map((st) => (
@@ -1802,7 +2665,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                       value={stateCode}
                       onChange={(e) => setStateCode(e.target.value.toUpperCase())}
                       placeholder="e.g. ON, LDN"
-                      className="w-full h-9 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                      className="w-full h-10 sm:h-9 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                     />
                   )}
                 </div>
@@ -1817,7 +2680,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                     value={postalCode}
                     onChange={(e) => setPostalCode(e.target.value)}
                     placeholder="Optional ZIP"
-                    className="w-full h-9 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                    className="w-full h-10 sm:h-9 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                   />
                 </div>
 
@@ -1832,7 +2695,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                       setPeopleCountry(e.target.value);
                       setStateCode('');
                     }}
-                    className="w-full h-9 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                    className="w-full h-10 sm:h-9 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                   >
                     {GLOBAL_COUNTRY_OPTIONS.map((c) => (
                       <option key={c.iso2} value={c.iso2}>
@@ -1995,7 +2858,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                             setPeoplePage(1);
                           }}
                           placeholder="Filter listed matches by middle initial, city, county, ZIP, age, or employer..."
-                          className="w-full h-8 pl-8 pr-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                          className="w-full h-10 sm:h-8 pl-8 pr-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-600"
                         />
                       </div>
 
@@ -2007,7 +2870,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                             setPeopleStateQuickFilter(e.target.value);
                             setPeoplePage(1);
                           }}
-                          className="h-8 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 shrink-0 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                          className="h-10 sm:h-8 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 shrink-0 focus:outline-none focus:ring-2 focus:ring-sky-600"
                         >
                           <option value="">
                             All Listed States ({availableResultStates.length})
@@ -2037,29 +2900,33 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                         const cleanName = formatDirectoryFullName(rec.ownerName);
                         return (
                           <div key={rec.id} className="p-3 space-y-1.5 text-xs">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-semibold text-slate-900 truncate">
-                                  {cleanName}
-                                </span>
-                                {rec.estimatedAge && (
-                                  <span className="text-[11px] font-mono tabular-nums text-slate-500 shrink-0">
-                                    · Age {rec.estimatedAge}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="font-semibold text-slate-900 truncate">
+                                    {cleanName}
                                   </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => triggerCopy(nameTok, cleanName)}
+                                    title={cleanName}
+                                    aria-label={cleanName}
+                                    className="w-6 h-6 inline-flex items-center justify-center text-slate-500 hover:text-sky-800 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                  >
+                                    {copiedToken === nameTok ? (
+                                      <Check className="w-3 h-3 text-emerald-700" />
+                                    ) : (
+                                      <Copy className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                                {(rec.estimatedAge || rec.dateOfBirth) && (
+                                  <div className="text-[11px] text-slate-600 mt-0.5">
+                                    {rec.estimatedAge ? `Age ${rec.estimatedAge}` : ''}
+                                    {rec.estimatedAge && rec.dateOfBirth ? ' · ' : ''}
+                                    {rec.dateOfBirth ? `DOB: ${rec.dateOfBirth}` : ''}
+                                  </div>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => triggerCopy(nameTok, cleanName)}
-                                  title={cleanName}
-                                  aria-label={cleanName}
-                                  className="w-6 h-6 inline-flex items-center justify-center text-slate-500 hover:text-sky-800 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
-                                >
-                                  {copiedToken === nameTok ? (
-                                    <Check className="w-3 h-3 text-emerald-700" />
-                                  ) : (
-                                    <Copy className="w-3 h-3" />
-                                  )}
-                                </button>
                               </div>
 
                               <button
@@ -2095,7 +2962,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                               </span>
                             </div>
 
-                            <div className="text-[11px] text-slate-600 truncate">
+                            <div className="text-[11px] text-slate-600 break-words">
                               {[rec.streetAddress, rec.city, rec.regionCode, rec.postalCode]
                                 .filter(Boolean)
                                 .join(', ')}
@@ -2111,7 +2978,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                       <table className="w-full text-left border-collapse text-xs">
                         <thead className="sticky top-0 bg-slate-100 border-b border-slate-200 text-slate-700 z-10">
                           <tr>
-                            <th className="py-2 px-3.5 font-semibold">Full Name &amp; Age</th>
+                            <th className="py-2 px-3.5 font-semibold">Full Name, Age &amp; DOB</th>
                             <th className="py-2 px-3.5 font-semibold">Phone &amp; Carrier</th>
                             <th className="py-2 px-3.5 font-semibold">Address, City, State &amp; ZIP</th>
                             <th className="py-2 px-3.5 font-semibold">County</th>
@@ -2144,7 +3011,12 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                             Age {rec.estimatedAge}
                                           </span>
                                         ) : null}
-                                        {rec.estimatedAge && rec.matchConfidenceLabel ? ' · ' : ''}
+                                        {rec.dateOfBirth ? (
+                                          <span className="text-slate-700 font-medium">
+                                            {rec.estimatedAge ? ' · ' : ''}DOB {rec.dateOfBirth}
+                                          </span>
+                                        ) : null}
+                                        {(rec.estimatedAge || rec.dateOfBirth) && rec.matchConfidenceLabel ? ' · ' : ''}
                                         {rec.matchConfidenceLabel ? (
                                           <span
                                             className={
@@ -2284,7 +3156,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                   aria-label="Default Country"
                   value={batchCountry}
                   onChange={(e) => setBatchCountry(e.target.value)}
-                  className="h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 shrink-0"
+                  className="h-10 sm:h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 shrink-0"
                 >
                   {GLOBAL_COUNTRY_OPTIONS.map((c) => (
                     <option key={c.iso2} value={c.iso2}>
@@ -2306,7 +3178,7 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                 <button
                   type="submit"
                   disabled={isCheckingBatch || !batchText.trim()}
-                  className="h-9 px-5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto h-10 sm:h-9 px-5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {isCheckingBatch ? 'Verifying...' : 'Verify Numbers'}
                 </button>
@@ -2380,14 +3252,74 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                   )}
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* Mobile Cards (< md) for Batch Verify */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {paginatedBatch.map((item, idx) => {
+                    const tok = `batch-item-${idx}`;
+                    return (
+                      <div key={`${item.rawInput}-${idx}`} className="p-3.5 space-y-1 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono tabular-nums font-semibold text-slate-900">
+                                {item.internationalFormat ?? item.rawInput}
+                              </span>
+                              {item.e164 && (
+                                <button
+                                  type="button"
+                                  onClick={() => triggerCopy(tok, item.e164!)}
+                                  title={item.e164}
+                                  aria-label={item.e164}
+                                  className="w-6 h-6 inline-flex items-center justify-center text-slate-600 bg-slate-50 border border-slate-200 rounded shrink-0 cursor-pointer"
+                                >
+                                  {copiedToken === tok ? (
+                                    <Check className="w-3 h-3 text-emerald-700" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-600 mt-0.5">
+                              <span
+                                className={
+                                  item.isValidE164
+                                    ? 'font-semibold text-emerald-700'
+                                    : 'font-semibold text-rose-700'
+                                }
+                              >
+                                {item.isValidE164 ? 'Valid Line' : 'Invalid'}
+                              </span>
+                              {item.ownerName ? ` · ${formatDirectoryFullName(item.ownerName)}` : ''}
+                              {item.carrierGroup ? ` · ${item.carrierGroup} (${item.lineType})` : ''}
+                            </div>
+                          </div>
+                          {item.e164 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                runPhoneLookup(item.e164!, item.countryIso2 ?? undefined)
+                              }
+                              className="px-2 py-1 text-[11px] font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded shrink-0 cursor-pointer"
+                            >
+                              Report
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table (md+) */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="bg-slate-100 border-b border-slate-200 text-slate-700">
                       <tr>
                         <th className="py-2 px-3.5 font-semibold">Input / E.164</th>
                         <th className="py-2 px-3.5 font-semibold">Existence</th>
-                        <th className="py-2 px-3.5 font-semibold hidden sm:table-cell">Public Owner</th>
-                        <th className="py-2 px-3.5 font-semibold hidden md:table-cell">Carrier &amp; Line</th>
+                        <th className="py-2 px-3.5 font-semibold">Public Owner</th>
+                        <th className="py-2 px-3.5 font-semibold">Carrier &amp; Line</th>
                         <th className="py-2 px-3.5 font-semibold text-right">Dossier</th>
                       </tr>
                     </thead>
@@ -2425,10 +3357,10 @@ export const ContactFinderPanel: React.FC<ContactFinderPanelProps> = ({
                                 <span className="font-semibold text-rose-700">Invalid</span>
                               )}
                             </td>
-                            <td className="py-2 px-3.5 text-slate-800 hidden sm:table-cell">
+                            <td className="py-2 px-3.5 text-slate-800">
                               {item.ownerName ? formatDirectoryFullName(item.ownerName) : 'Open Report'}
                             </td>
-                            <td className="py-2 px-3.5 text-slate-600 hidden md:table-cell">
+                            <td className="py-2 px-3.5 text-slate-600">
                               {item.carrierGroup} · {item.lineType}
                             </td>
                             <td className="py-2 px-3.5 text-right">

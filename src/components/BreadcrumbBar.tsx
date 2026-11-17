@@ -97,7 +97,7 @@ export const BreadcrumbBar: React.FC<DirectoryToolbarProps> = ({
             onChangeFilters((prev) => ({ ...prev, search: e.target.value }))
           }
           placeholder="Search name, phone, city, state, zip, or carrier..."
-          className="w-full h-8 pl-8 pr-7 text-xs sm:text-[13px] bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-sky-600"
+          className="w-full h-9 sm:h-8 pl-8 pr-7 text-xs sm:text-[13px] bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-sky-600"
         />
         {filters.search && (
           <button

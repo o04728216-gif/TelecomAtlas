@@ -255,7 +255,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5">
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5 pb-16 md:pb-6">
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
         {/* Live Public Registry Harvester Header */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
@@ -362,7 +362,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="Michael"
-                  className="w-full h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-10 sm:h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
@@ -376,7 +376,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Smith"
-                  className="w-full h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-10 sm:h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
@@ -391,7 +391,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   value={stateCode}
                   onChange={(e) => setStateCode(e.target.value.toUpperCase())}
                   placeholder="CA, TX..."
-                  className="w-full h-8.5 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-10 sm:h-8.5 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
@@ -405,7 +405,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   placeholder="Houston"
-                  className="w-full h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-10 sm:h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
@@ -419,7 +419,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value)}
                   placeholder="90210"
-                  className="w-full h-8.5 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-10 sm:h-8.5 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
@@ -431,7 +431,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   id="web-country"
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value)}
-                  className="w-full h-8.5 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-10 sm:h-8.5 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 >
                   {GLOBAL_COUNTRY_OPTIONS.map((c) => (
                     <option key={c.iso2} value={c.iso2}>
@@ -444,7 +444,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="col-span-2 sm:col-span-1 h-8.5 px-3.5 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60"
+                className="col-span-2 sm:col-span-1 h-10 sm:h-8.5 px-3.5 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60"
               >
                 <Search className="w-3.5 h-3.5" />
                 <span>{isLoading ? 'Fetching...' : 'Get Numbers'}</span>
