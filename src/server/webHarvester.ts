@@ -3,6 +3,7 @@ import type { CountryCode } from 'libphonenumber-js';
 import type { PhoneNumberRecord } from '../shared/types.ts';
 import { COUNTRIES, REGIONS, ZIP_CODES } from './openDataAllocations.ts';
 import { parseAndClassifyPhoneNumber, resolveContinentForCountry } from './prefixEngine.ts';
+import { resolveCountySync } from './usCountyCatalog.ts';
 
 interface NpiAddress {
   address_1?: string;
@@ -321,6 +322,12 @@ export async function fetchLiveWebIndividualOwners(
           zipId: matchedZip?.id ?? null,
           postalCode: normalizedZip,
           city: cityClean,
+          county: resolveCountySync({
+            countryIso2: finalCountryIso2,
+            stateCode: matchedRegion?.code ?? stateRaw,
+            city: cityClean,
+            postalCode: normalizedZip,
+          }),
           latitude: matchedZip?.latitude ?? intel.latitude ?? null,
           longitude: matchedZip?.longitude ?? intel.longitude ?? null,
           ndcPrefix: intel.ndcPrefix ?? '',
@@ -413,6 +420,12 @@ export async function fetchOpenBreweryUsPhones(page = 1): Promise<PhoneNumberRec
         zipId: null,
         postalCode: normalizedZip,
         city: item.city?.trim() || intel.city,
+        county: resolveCountySync({
+          countryIso2: 'US',
+          stateCode: matchedRegion?.code ?? intel.regionCode,
+          city: item.city?.trim() || intel.city,
+          postalCode: normalizedZip,
+        }),
         latitude: intel.latitude,
         longitude: intel.longitude,
         ndcPrefix: intel.ndcPrefix ?? '',

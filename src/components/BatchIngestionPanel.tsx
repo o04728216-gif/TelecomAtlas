@@ -9,6 +9,30 @@ interface BatchIngestionPanelProps {
 const JOBS_PAGE_SIZE = 10;
 const REJECTIONS_PAGE_SIZE = 10;
 
+const INGEST_COUNTRY_OPTIONS = [
+  { iso2: 'US', label: 'United States (+1)' },
+  { iso2: 'CA', label: 'Canada (+1)' },
+  { iso2: 'MX', label: 'Mexico (+52)' },
+  { iso2: 'GB', label: 'United Kingdom (+44)' },
+  { iso2: 'DE', label: 'Germany (+49)' },
+  { iso2: 'FR', label: 'France (+33)' },
+  { iso2: 'ES', label: 'Spain (+34)' },
+  { iso2: 'IT', label: 'Italy (+39)' },
+  { iso2: 'NL', label: 'Netherlands (+31)' },
+  { iso2: 'CH', label: 'Switzerland (+41)' },
+  { iso2: 'JP', label: 'Japan (+81)' },
+  { iso2: 'IN', label: 'India (+91)' },
+  { iso2: 'SG', label: 'Singapore (+65)' },
+  { iso2: 'KR', label: 'South Korea (+82)' },
+  { iso2: 'AE', label: 'United Arab Emirates (+971)' },
+  { iso2: 'PH', label: 'Philippines (+63)' },
+  { iso2: 'BR', label: 'Brazil (+55)' },
+  { iso2: 'NG', label: 'Nigeria (+234)' },
+  { iso2: 'ZA', label: 'South Africa (+27)' },
+  { iso2: 'AU', label: 'Australia (+61)' },
+  { iso2: 'NZ', label: 'New Zealand (+64)' },
+];
+
 export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
   onIngestionCompleted,
 }) => {
@@ -122,22 +146,22 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
   }, [selectedJob, rejectionsPage]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5">
+      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="text-base sm:text-xl font-semibold text-slate-900">
             Import Phone Numbers &amp; Owners
           </h1>
-          <p className="mt-1 text-sm text-slate-600 max-w-2xl">
+          <p className="mt-1 text-xs sm:text-sm text-slate-600 max-w-2xl">
             Paste phone numbers (or <code className="font-mono text-xs">Owner Name, Phone Number</code> lines) to detect carrier &amp; region automatically and save them into your Phone Directory.
           </p>
         </div>
 
         <form
           onSubmit={handleEnqueue}
-          className="bg-white border border-slate-200 rounded-lg p-5 space-y-4"
+          className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 space-y-4"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div className="space-y-1">
               <label htmlFor="ingest-source" className="block text-xs font-medium text-slate-700">
                 List Label
@@ -161,37 +185,34 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
                 onChange={(e) => setDefaultCountry(e.target.value)}
                 className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
               >
-                <option value="US">United States (+1)</option>
-                <option value="CA">Canada (+1)</option>
-                <option value="GB">United Kingdom (+44)</option>
-                <option value="DE">Germany (+49)</option>
-                <option value="FR">France (+33)</option>
-                <option value="JP">Japan (+81)</option>
-                <option value="IN">India (+91)</option>
-                <option value="AU">Australia (+61)</option>
+                {INGEST_COUNTRY_OPTIONS.map((c) => (
+                  <option key={c.iso2} value={c.iso2}>
+                    {c.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <label htmlFor="ingest-raw" className="block text-xs font-medium text-slate-700">
                 Phone Numbers (one per line, optional &quot;Owner Name, +Phone&quot;)
               </label>
               <button
                 type="button"
                 onClick={loadRealVerifiedSample}
-                className="text-xs text-sky-700 hover:text-sky-900 cursor-pointer"
+                className="text-xs text-sky-700 hover:text-sky-900 whitespace-nowrap cursor-pointer"
               >
-                Load Example List
+                Load Example
               </button>
             </div>
             <textarea
               id="ingest-raw"
-              rows={7}
+              rows={6}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              placeholder="Paste real phone numbers here, one per line (e.g. Jane Doe, +12125550199)..."
+              placeholder="Paste real phone numbers here, one per line (e.g. Jane Doe, +13102715800)..."
               className="w-full p-3 text-xs font-mono bg-slate-50 border border-slate-300 rounded-md text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600"
             />
           </div>
@@ -200,14 +221,14 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
             <div className="text-xs text-red-700 font-medium">{errorMsg}</div>
           )}
 
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs text-slate-500">
               Invalid or non-existent numbers are automatically rejected during validation.
             </span>
             <button
               type="submit"
               disabled={submitting || !rawText.trim()}
-              className="px-4 py-2 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 disabled:opacity-50 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+              className="h-9 px-4 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 disabled:opacity-50 rounded-md transition-colors whitespace-nowrap cursor-pointer"
             >
               {submitting ? 'Validating & Importing...' : 'Validate & Add to Directory'}
             </button>
@@ -216,7 +237,7 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
 
         {jobs.length > 0 && (
           <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900">
                 Recent Import Jobs
               </h2>
@@ -226,7 +247,7 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
             </div>
             <div className="divide-y divide-slate-200">
               {paginatedJobs.map((job) => (
-                <div key={job.id} className="p-4 space-y-1.5 text-xs">
+                <div key={job.id} className="p-3.5 sm:p-4 space-y-1.5 text-xs">
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-semibold text-slate-900">
                       {job.sourceLabel}
@@ -242,8 +263,8 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
                           className="text-xs text-rose-700 hover:underline cursor-pointer"
                         >
                           {selectedJobId === job.id
-                            ? 'Hide Rejected Lines'
-                            : `View Rejected (${job.rejections.length})`}
+                            ? 'Hide Rejected'
+                            : `Rejected (${job.rejections.length})`}
                         </button>
                       )}
                       <span className="font-mono font-semibold text-emerald-700">
@@ -251,12 +272,12 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-4 font-mono tabular-nums text-slate-600">
+                  <div className="flex flex-wrap items-center gap-3 font-mono tabular-nums text-slate-600">
                     <span>Added: {job.validInsertedCount}</span>
                     <span>·</span>
-                    <span>Already Existed: {job.duplicateSkippedCount}</span>
+                    <span>Duplicates: {job.duplicateSkippedCount}</span>
                     <span>·</span>
-                    <span>Invalid Skipped: {job.invalidRejectedCount}</span>
+                    <span>Invalid: {job.invalidRejectedCount}</span>
                   </div>
                 </div>
               ))}
@@ -274,7 +295,7 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
 
         {selectedJob && selectedJob.rejections.length > 0 && (
           <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-900">
                 Rejected Invalid Lines — {selectedJob.sourceLabel}
               </h3>
@@ -286,7 +307,7 @@ export const BatchIngestionPanel: React.FC<BatchIngestionPanelProps> = ({
               {paginatedRejections.map((rej, idx) => (
                 <div
                   key={`${rej.raw}-${idx}`}
-                  className="px-5 py-2.5 flex items-center justify-between gap-4 text-xs"
+                  className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs"
                 >
                   <span className="font-mono text-slate-800">{rej.raw}</span>
                   <span className="text-rose-700">{rej.reason}</span>

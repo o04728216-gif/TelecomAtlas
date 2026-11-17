@@ -693,8 +693,10 @@ const US_50_STATES_SEED: UsStateSeed[] = [
   ]},
 ];
 
-// Additional valid adjacent central-office exchanges per metro to provide 7.5M+ US scale across all 50 states
-const ADJACENT_EXCHANGE_OFFSETS = [0, 8, 16, 24];
+// Additional valid adjacent central-office exchanges per metro to provide ~48M+ US scale across all 50 states + D.C.
+const ADJACENT_EXCHANGE_OFFSETS = [
+  0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69,
+];
 
 export function buildAll50UsStatesCatalog(): {
   usRegions: RegionRecord[];

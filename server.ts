@@ -5,7 +5,10 @@ import type { LineType, WebHarvestSummary } from './src/shared/types.ts';
 import { parseAndClassifyPhoneNumber } from './src/server/prefixEngine.ts';
 import { registryStore } from './src/server/registryStore.ts';
 import type { QueryFilterInput } from './src/server/registryStore.ts';
-import { lookupPublicContactByPhone } from './src/server/contactFinderService.ts';
+import {
+  lookupPublicContactByPhone,
+  searchPublicPeopleComprehensive,
+} from './src/server/contactFinderService.ts';
 import {
   crawlPublicWebpageForPhones,
   fetchLiveWebIndividualOwners,
@@ -90,6 +93,24 @@ async function startServer() {
     }
   });
 
+  // 2b. World Radar — Live Random Worldwide Subscriber Line
+  app.get('/api/random-line', (req, res) => {
+    try {
+      const continent = typeof req.query.continent === 'string' ? req.query.continent : undefined;
+      const country = typeof req.query.country === 'string' ? req.query.country : undefined;
+      const record = registryStore.getRandomGlobalRecord({ continent, country });
+      const facets = registryStore.getFacets({});
+      res.json({
+        record,
+        totalWorldwide: facets.totalRegistryRecords,
+        totalCountries: facets.countries.length,
+      });
+    } catch (error) {
+      console.error('Error fetching random global line:', error);
+      res.status(500).json({ error: 'Failed to fetch global line.' });
+    }
+  });
+
   // 3. Dedicated Contact Finder — Reverse Phone Public Dossier Lookup
   app.post('/api/contact-finder/phone', async (req, res) => {
     try {
@@ -111,9 +132,8 @@ async function startServer() {
     }
   });
 
-  // 4. Dedicated Contact Finder — People / Name & Location Search (Merges live registry + local index)
+  // 4. Dedicated Contact Finder — Comprehensive US & Global First/Last Name People Search
   app.post('/api/contact-finder/people', async (req, res) => {
-    const startMs = performance.now();
     try {
       const { firstName, lastName, city, state, postalCode, countryCode } = req.body as {
         firstName?: string;
@@ -124,41 +144,16 @@ async function startServer() {
         countryCode?: string;
       };
 
-      const liveRecords = await fetchLiveWebIndividualOwners({
-        firstName: firstName?.trim() || undefined,
-        lastName: lastName?.trim() || undefined,
-        city: city?.trim() || undefined,
-        state: state?.trim() || undefined,
-        postalCode: postalCode?.trim() || undefined,
-        countryCode: countryCode?.trim() || 'US',
-        limit: 200,
+      const response = await searchPublicPeopleComprehensive({
+        firstName,
+        lastName,
+        city,
+        state,
+        postalCode,
+        countryCode,
       });
 
-      if (liveRecords.length > 0) {
-        registryStore.mergeHarvestedWebRecords(liveRecords);
-      }
-
-      const searchTerms = [firstName, lastName, city].map((s) => s?.trim()).filter(Boolean).join(' ');
-      const localQuery = registryStore.queryNumbers({
-        country: countryCode?.trim() || undefined,
-        region: state?.trim() ? `${countryCode?.trim() || 'US'}-${state.trim().toUpperCase()}` : undefined,
-        zipCodes: postalCode?.trim() ? [postalCode.trim()] : [],
-        search: searchTerms || undefined,
-        limit: 1000,
-        offset: 0,
-      });
-
-      // Combine live + local without duplicates
-      const combinedMap = new Map<string, typeof liveRecords[number]>();
-      for (const r of liveRecords) combinedMap.set(r.e164, r);
-      for (const r of localQuery.items) {
-        if (!combinedMap.has(r.e164)) combinedMap.set(r.e164, r);
-      }
-
-      return res.json({
-        items: Array.from(combinedMap.values()),
-        durationMs: Math.round(performance.now() - startMs),
-      });
+      return res.json(response);
     } catch (error) {
       console.error('Error in /api/contact-finder/people:', error);
       return res.status(500).json({ error: 'Failed to search public contact records.' });
@@ -378,17 +373,6 @@ async function startServer() {
     res.json({ jobs: registryStore.getJobs() });
   });
 
-  app.get('/api/architecture/artifacts', (_req, res) => {
-    try {
-      const schemaPath = path.resolve(process.cwd(), 'schema/postgresql_postgis_schema.sql');
-      const enginePath = path.resolve(process.cwd(), 'src/server/prefixEngine.ts');
-      const schemaSql = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, 'utf-8') : '';
-      const engineCode = fs.existsSync(enginePath) ? fs.readFileSync(enginePath, 'utf-8') : '';
-      res.json({ schemaSql, engineCode });
-    } catch {
-      res.status(500).json({ error: 'Failed to read schema files.' });
-    }
-  });
 
   const distPath = path.resolve(process.cwd(), 'dist');
   const isProd = process.env.NODE_ENV === 'production' && fs.existsSync(distPath);

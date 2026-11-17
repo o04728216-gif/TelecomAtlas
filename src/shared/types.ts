@@ -82,6 +82,10 @@ export interface PhoneNumberRecord {
   zipId: string | null;
   postalCode: string | null;
   city: string | null;
+  county?: string | null;
+  estimatedAge?: number | null;
+  matchConfidenceLabel?: string | null;
+  relativesPreview?: string[];
   latitude: number | null;
   longitude: number | null;
   ndcPrefix: string;
@@ -93,6 +97,15 @@ export interface PhoneNumberRecord {
   isValidE164: boolean;
   registrySource: string;
   indexedAt: string;
+}
+
+export interface PeopleSearchResponse {
+  items: PhoneNumberRecord[];
+  totalMatched: number;
+  liveVerifiedCount: number;
+  statesCovered: number;
+  queryVariantsUsed: string[];
+  durationMs: number;
 }
 
 export interface ParsedNumberIntelligence {
@@ -179,18 +192,108 @@ export interface PublicWebMention {
 }
 
 export interface PublicContactAddress {
-  label: 'Primary Location' | 'Mailing Address' | 'Exchange Rate Center';
-  street: string | null;
-  city: string | null;
-  state: string | null;
-  postalCode: string | null;
+  index: number;
+  label:
+    | 'Current Residence'
+    | 'Business / Practice Address'
+    | 'Mailing Address'
+    | 'Previous Address';
+  street: string;
+  unit?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  county?: string | null;
   country: string;
+  yearsActive: string;
+  coordinates?: string | null;
   phone?: string | null;
+}
+
+export interface EmploymentRecord {
+  jobTitle: string;
+  employer: string;
+  departmentOrSpecialty: string;
+  industry: string;
+  status: 'Current' | 'Prior';
+  years: string;
+  location: string;
+  workPhone?: string | null;
+  sourceNote: string;
+}
+
+export interface ContactEmailRecord {
+  address: string;
+  type: 'Work' | 'Personal' | 'Public Web';
+  domain: string;
+  confidenceNote: string;
+}
+
+export interface VehicleOwnedRecord {
+  year: number;
+  make: string;
+  model: string;
+  bodyStyle: string;
+  vinMasked: string;
+  registrationState: string;
+  ownershipType: string;
+  status: 'Active Registration' | 'Historical Registration';
+}
+
+export interface RelativeContactRecord {
+  name: string;
+  age: number;
+  relationship:
+    | 'Possible Spouse / Partner'
+    | 'Immediate Relative'
+    | 'Parent / Senior Relative'
+    | 'Sibling / Relative'
+    | 'Household Member';
+  cityState: string;
+  phoneE164: string;
+  phoneDisplay: string;
+  carrier: string;
+}
+
+export interface ProfessionalLicenseRecord {
+  licenseType: string;
+  licenseNumber: string;
+  issuingAuthority: string;
+  status: string;
+}
+
+export interface EducationRecord {
+  institution: string;
+  degreeOrCredential: string;
+  fieldOfStudy: string;
+  graduationYear: string;
+}
+
+export interface PropertyAndResidenceProfile {
+  propertyType: string;
+  ownershipStatus: string;
+  estimatedValue: string;
+  livingAreaSqFt: string;
+  yearBuilt: number;
+  lengthOfResidence: string;
+  countyOrDistrict: string;
+  localTimezone: string;
+  coordinates: string | null;
+}
+
+export interface SocialWebProfile {
+  platform: string;
+  label: string;
+  url: string;
 }
 
 export interface AssociatedContactItem {
   record: PhoneNumberRecord;
-  relationship: 'Same Address' | 'Same Surname & Area' | 'Same Organization' | 'Same Local Exchange';
+  relationship:
+    | 'Same Address'
+    | 'Same Surname & Area'
+    | 'Same Organization'
+    | 'Same Local Exchange';
 }
 
 export interface ContactFinderReport {
@@ -203,6 +306,11 @@ export interface ContactFinderReport {
   intel: ParsedNumberIntelligence;
   primaryOwner: {
     name: string;
+    age: number | null;
+    birthYear: number | null;
+    aliases: string[];
+    jobTitle: string | null;
+    employer: string | null;
     title: string | null;
     organization: string | null;
     category: string | null;
@@ -210,7 +318,15 @@ export interface ContactFinderReport {
     verificationSource: string;
     lastUpdated: string | null;
   } | null;
-  addresses: PublicContactAddress[];
+  employmentHistory: EmploymentRecord[];
+  emails: ContactEmailRecord[];
+  addresses: PublicContactAddress[]; // Strictly up to 10 chronological addresses (Last 10 Addresses)
+  vehiclesOwned: VehicleOwnedRecord[];
+  relatives: RelativeContactRecord[];
+  propertyProfile: PropertyAndResidenceProfile | null;
+  educationHistory: EducationRecord[];
+  professionalLicenses: ProfessionalLicenseRecord[];
+  socialProfiles: SocialWebProfile[];
   associatedPhones: Array<{
     e164: string;
     display: string;

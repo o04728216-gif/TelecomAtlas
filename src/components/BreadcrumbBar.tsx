@@ -1,325 +1,193 @@
 import React from 'react';
 import {
   Check,
-  ChevronRight,
   Copy,
   Globe,
   PanelLeftClose,
   PanelLeftOpen,
+  Phone,
   Search,
+  SlidersHorizontal,
+  User,
   X,
 } from 'lucide-react';
 import type { HierarchyFacetSummary } from '../shared/types.ts';
+import { formatCompactNumber } from '../utils/formatters.ts';
 import type { ActiveFilters } from './FilterSidebar.tsx';
 
-interface BreadcrumbBarProps {
+interface DirectoryToolbarProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   facets: HierarchyFacetSummary | null;
   filters: ActiveFilters;
   totalMatched: number;
   pageCount: number;
-  copiedPageToast: boolean;
+  copiedNamesToast: boolean;
+  copiedNumbersToast: boolean;
   isFetchingLiveWeb: boolean;
   liveWebStatusMessage: string | null;
   onChangeFilters: (updater: (prev: ActiveFilters) => ActiveFilters) => void;
+  onCopyPageNames: () => void;
   onCopyPageNumbers: () => void;
   onSearchLiveWebNow: () => void;
 }
 
-export const BreadcrumbBar: React.FC<BreadcrumbBarProps> = ({
+export const BreadcrumbBar: React.FC<DirectoryToolbarProps> = ({
   sidebarOpen,
   onToggleSidebar,
   facets,
   filters,
   totalMatched,
   pageCount,
-  copiedPageToast,
+  copiedNamesToast,
+  copiedNumbersToast,
   isFetchingLiveWeb,
   liveWebStatusMessage,
   onChangeFilters,
+  onCopyPageNames,
   onCopyPageNumbers,
   onSearchLiveWebNow,
 }) => {
-  const activeContinentObj = facets?.continents.find((c) => c.code === filters.continent);
-  const activeCountryObj = facets?.countries.find((c) => c.iso2 === filters.country);
-  const activeRegionObj = facets?.regions.find((r) => r.id === filters.region);
+  const activeFilterCount =
+    (filters.continent ? 1 : 0) +
+    (filters.country ? 1 : 0) +
+    (filters.region ? 1 : 0) +
+    (filters.zipInput.trim() ? 1 : 0) +
+    filters.carriers.length +
+    filters.lineTypes.length +
+    (filters.prefix.trim() ? 1 : 0);
 
   return (
-    <div className="bg-white border-b border-slate-200 px-4 py-3 space-y-2.5">
-      {/* Row 1: Search Bar + Fetch Web + Copy Page (500) */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          aria-label={sidebarOpen ? 'Hide filters' : 'Show filters'}
-          title={sidebarOpen ? 'Hide filters' : 'Show filters'}
-          className="h-10 px-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors shrink-0 cursor-pointer"
-        >
+    <div className="bg-white border-b border-slate-200 px-2.5 sm:px-4 py-2 flex items-center gap-1.5 sm:gap-2">
+      {/* Toggle Sidebar / Mobile Filter Drawer */}
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        aria-label={sidebarOpen ? 'Hide filters' : 'Show filters'}
+        title={sidebarOpen ? 'Hide filters' : 'Show filters'}
+        className={`h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 text-xs font-medium rounded-lg border transition-colors shrink-0 cursor-pointer ${
+          activeFilterCount > 0
+            ? 'bg-sky-50 text-sky-900 border-sky-300'
+            : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+        }`}
+      >
+        <SlidersHorizontal className="w-3.5 h-3.5 lg:hidden" />
+        <span className="hidden lg:inline">
           {sidebarOpen ? (
-            <PanelLeftClose className="w-4 h-4" />
+            <PanelLeftClose className="w-3.5 h-3.5" />
           ) : (
-            <PanelLeftOpen className="w-4 h-4" />
+            <PanelLeftOpen className="w-3.5 h-3.5" />
           )}
-          <span className="hidden sm:inline">Filters</span>
-        </button>
+        </span>
+        <span className="hidden sm:inline">Filters</span>
+        {activeFilterCount > 0 && (
+          <span className="font-mono tabular-nums text-[11px] font-semibold text-sky-800">
+            {activeFilterCount}
+          </span>
+        )}
+      </button>
 
-        {/* Search Input */}
-        <div className="relative flex-1 min-w-60">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={filters.search}
-            onChange={(e) =>
-              onChangeFilters((prev) => ({ ...prev, search: e.target.value }))
-            }
-            placeholder="Search any owner name, phone number, city, state, zip, or carrier (e.g. Texas, 90210, 310-271, Smith)..."
-            className="w-full h-10 pl-10 pr-8 text-sm bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-sky-600"
-          />
-          {filters.search && (
-            <button
-              type="button"
-              onClick={() => onChangeFilters((prev) => ({ ...prev, search: '' }))}
-              aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Live Web Fetcher */}
-        <button
-          type="button"
-          onClick={onSearchLiveWebNow}
-          disabled={isFetchingLiveWeb}
-          className="h-10 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-800 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
-          title="Pull more phone numbers & owners from the web"
-        >
-          <Globe className="w-3.5 h-3.5 text-sky-700" />
-          <span>{isFetchingLiveWeb ? 'Fetching Web...' : 'Fetch Web'}</span>
-        </button>
-
-        {/* Copy ONLY Current Page (500 Numbers) */}
-        <button
-          type="button"
-          onClick={onCopyPageNumbers}
-          disabled={pageCount === 0}
-          className="h-10 px-3 inline-flex items-center gap-1.5 text-xs font-semibold text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
-          title="Copy only the phone numbers shown on this page"
-        >
-          {copiedPageToast ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-emerald-700" />
-              <span className="text-emerald-800">Copied Page ({pageCount.toLocaleString()})!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3.5 h-3.5 text-sky-700" />
-              <span>Copy Page ({pageCount.toLocaleString()})</span>
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Row 2: Breadcrumb Path + Worldwide Million-Scale Count Summary */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <nav aria-label="Location Path" className="flex items-center gap-1.5 min-w-0 overflow-x-auto">
+      {/* Search Input */}
+      <div className="relative flex-1 min-w-0">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="text"
+          value={filters.search}
+          onChange={(e) =>
+            onChangeFilters((prev) => ({ ...prev, search: e.target.value }))
+          }
+          placeholder="Search name, phone, city, state, zip, or carrier..."
+          className="w-full h-8 pl-8 pr-7 text-xs sm:text-[13px] bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-600 focus:border-sky-600"
+        />
+        {filters.search && (
           <button
             type="button"
-            onClick={() =>
-              onChangeFilters((prev) => ({
-                ...prev,
-                continent: '',
-                country: '',
-                region: '',
-                zipInput: '',
-              }))
-            }
-            className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-              !filters.continent
-                ? 'font-semibold text-slate-900'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            onClick={() => onChangeFilters((prev) => ({ ...prev, search: '' }))}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
           >
-            All Worldwide
+            <X className="w-3.5 h-3.5" />
           </button>
-
-          {filters.continent && (
-            <>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <button
-                type="button"
-                onClick={() =>
-                  onChangeFilters((prev) => ({
-                    ...prev,
-                    country: '',
-                    region: '',
-                    zipInput: '',
-                  }))
-                }
-                className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                  !filters.country
-                    ? 'font-semibold text-slate-900'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {activeContinentObj?.name ?? filters.continent}
-              </button>
-            </>
-          )}
-
-          {filters.country && (
-            <>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <button
-                type="button"
-                onClick={() =>
-                  onChangeFilters((prev) => ({
-                    ...prev,
-                    region: '',
-                    zipInput: '',
-                  }))
-                }
-                className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                  !filters.region
-                    ? 'font-semibold text-slate-900'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {activeCountryObj
-                  ? `${activeCountryObj.name} (+${activeCountryObj.callingCode})`
-                  : filters.country}
-              </button>
-            </>
-          )}
-
-          {filters.region && (
-            <>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <button
-                type="button"
-                onClick={() =>
-                  onChangeFilters((prev) => ({
-                    ...prev,
-                    zipInput: '',
-                  }))
-                }
-                className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                  !filters.zipInput
-                    ? 'font-semibold text-slate-900'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {activeRegionObj?.name ?? filters.region}
-              </button>
-            </>
-          )}
-
-          {filters.zipInput.trim() && (
-            <>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="font-mono font-semibold text-sky-800 whitespace-nowrap shrink-0">
-                Zip {filters.zipInput.trim()}
-              </span>
-            </>
-          )}
-        </nav>
-
-        <div className="flex items-center gap-3 shrink-0">
-          {liveWebStatusMessage && (
-            <span className="text-xs font-medium text-emerald-700">
-              {liveWebStatusMessage}
-            </span>
-          )}
-          <span className="text-xs text-slate-600 font-mono tabular-nums whitespace-nowrap">
-            Total <span className="font-semibold text-slate-900">{totalMatched.toLocaleString()}</span> numbers
-            {facets && !filters.country && (
-              <>
-                {' '}· USA <span className="font-semibold text-sky-800">{facets.usTotalCount.toLocaleString()}</span>
-              </>
-            )}
-          </span>
-        </div>
+        )}
       </div>
 
-      {/* Row 3: Continent / Country / State Drilldown Buttons */}
-      {facets && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          {!filters.country && (
-            <button
-              type="button"
-              onClick={() =>
-                onChangeFilters((prev) => ({
-                  ...prev,
-                  continent: 'NA',
-                  country: 'US',
-                  region: '',
-                }))
-              }
-              className="px-2.5 py-1 text-xs font-semibold text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              United States (All 50 States){' '}
-              <span className="font-mono tabular-nums text-sky-700">
-                {facets.usTotalCount.toLocaleString()}
-              </span>
-            </button>
+      {/* Live Web Fetcher */}
+      <button
+        type="button"
+        onClick={onSearchLiveWebNow}
+        disabled={isFetchingLiveWeb}
+        className="h-8 px-2 sm:px-2.5 inline-flex items-center gap-1 text-xs font-medium text-slate-800 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+        title="Pull additional phone numbers & owners from the live web"
+        aria-label="Fetch live web numbers"
+      >
+        <Globe className={`w-3.5 h-3.5 text-sky-700 ${isFetchingLiveWeb ? 'animate-spin' : ''}`} />
+        <span className="hidden md:inline">{isFetchingLiveWeb ? 'Fetching...' : 'Web'}</span>
+      </button>
+
+      {/* Small Icon-Only: Copy All Full Names on Active Page */}
+      <button
+        type="button"
+        onClick={onCopyPageNames}
+        disabled={pageCount === 0}
+        className={`h-8 px-2 inline-flex items-center justify-center gap-1 rounded-lg border transition-colors shrink-0 cursor-pointer disabled:opacity-50 ${
+          copiedNamesToast
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+            : 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-slate-700'
+        }`}
+        title={`Copy all ${pageCount.toLocaleString()} full names on this page`}
+        aria-label={`Copy all ${pageCount} full names on this page`}
+      >
+        <User className="w-3.5 h-3.5" />
+        {copiedNamesToast ? (
+          <Check className="w-3 h-3 text-emerald-700" />
+        ) : (
+          <Copy className="w-3 h-3 text-slate-500" />
+        )}
+      </button>
+
+      {/* Small Icon-Only: Copy All Phone Numbers on Active Page */}
+      <button
+        type="button"
+        onClick={onCopyPageNumbers}
+        disabled={pageCount === 0}
+        className={`h-8 px-2 inline-flex items-center justify-center gap-1 rounded-lg border transition-colors shrink-0 cursor-pointer disabled:opacity-50 ${
+          copiedNumbersToast
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+            : 'bg-sky-50 hover:bg-sky-100 border-sky-300 text-sky-900'
+        }`}
+        title={`Copy all ${pageCount.toLocaleString()} phone numbers on this page`}
+        aria-label={`Copy all ${pageCount} phone numbers on this page`}
+      >
+        <Phone className="w-3.5 h-3.5 text-sky-700" />
+        {copiedNumbersToast ? (
+          <Check className="w-3 h-3 text-emerald-700" />
+        ) : (
+          <Copy className="w-3 h-3 text-sky-700" />
+        )}
+      </button>
+
+      {/* Quiet Inline Count Summary (Zero Breadcrumbs) */}
+      <div className="hidden sm:flex items-center gap-2 pl-1 shrink-0 text-xs">
+        {liveWebStatusMessage && (
+          <span className="font-medium text-emerald-700 whitespace-nowrap">
+            {liveWebStatusMessage}
+          </span>
+        )}
+        <span className="text-slate-600 font-mono tabular-nums whitespace-nowrap">
+          <span className="font-semibold text-slate-900 lg:hidden">
+            {formatCompactNumber(totalMatched)}
+          </span>
+          <span className="font-semibold text-slate-900 hidden lg:inline">
+            {totalMatched.toLocaleString()}
+          </span>{' '}
+          <span className="hidden md:inline">lines</span>
+          {facets && !filters.country && (
+            <span className="hidden xl:inline">
+              {' '}· {facets.countries.length} countries
+            </span>
           )}
-
-          {!filters.continent &&
-            facets.continents.map((cont) => (
-              <button
-                key={cont.code}
-                type="button"
-                onClick={() =>
-                  onChangeFilters((prev) => ({ ...prev, continent: cont.code }))
-                }
-                className="px-2.5 py-1 text-xs text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <span>{cont.name}</span>{' '}
-                <span className="font-mono tabular-nums text-slate-400">
-                  {cont.count.toLocaleString()}
-                </span>
-              </button>
-            ))}
-
-          {filters.continent &&
-            !filters.country &&
-            facets.countries.map((cty) => (
-              <button
-                key={cty.iso2}
-                type="button"
-                onClick={() =>
-                  onChangeFilters((prev) => ({ ...prev, country: cty.iso2 }))
-                }
-                className="px-2.5 py-1 text-xs text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <span>{cty.name}</span>{' '}
-                <span className="font-mono tabular-nums text-slate-400">
-                  +{cty.callingCode} · {cty.count.toLocaleString()}
-                </span>
-              </button>
-            ))}
-
-          {filters.country &&
-            !filters.region &&
-            facets.regions.map((reg) => (
-              <button
-                key={reg.id}
-                type="button"
-                onClick={() =>
-                  onChangeFilters((prev) => ({ ...prev, region: reg.id }))
-                }
-                className="px-2.5 py-1 text-xs text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <span>{reg.name}</span>{' '}
-                <span className="font-mono tabular-nums text-slate-400">
-                  {reg.count.toLocaleString()}
-                </span>
-              </button>
-            ))}
-        </div>
-      )}
+        </span>
+      </div>
     </div>
   );
 };

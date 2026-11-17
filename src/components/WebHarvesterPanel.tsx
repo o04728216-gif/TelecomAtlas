@@ -5,15 +5,20 @@ import {
   FileSearch,
   Globe,
   Link2,
+  Phone,
   Search,
   Trash2,
+  User,
   Zap,
 } from 'lucide-react';
 import type { PhoneNumberRecord, WebHarvestSummary } from '../shared/types.ts';
 import { copyTextToClipboard } from '../utils/clipboard.ts';
+import { formatDirectoryFullName } from '../utils/formatters.ts';
 import { PaginationBar } from './PaginationBar.tsx';
 
 interface WebHarvesterPanelProps {
+  mode?: 'directory' | 'url';
+  onModeChange?: (mode: 'directory' | 'url') => void;
   onNewRecordsHarvested: () => void;
   onOpenContactFinder: (e164: string) => void;
 }
@@ -21,23 +26,64 @@ interface WebHarvesterPanelProps {
 const HARVESTER_PAGE_SIZE = 500;
 
 const QUICK_WEB_LOCATIONS = [
-  { label: 'California USA', postalCode: '', countryCode: 'US', city: '', state: 'CA' },
-  { label: 'Texas USA', postalCode: '', countryCode: 'US', city: '', state: 'TX' },
-  { label: 'New York USA', postalCode: '', countryCode: 'US', city: '', state: 'NY' },
-  { label: 'Florida USA', postalCode: '', countryCode: 'US', city: '', state: 'FL' },
-  { label: 'Illinois USA', postalCode: '', countryCode: 'US', city: '', state: 'IL' },
-  { label: 'Pennsylvania USA', postalCode: '', countryCode: 'US', city: '', state: 'PA' },
+  { label: 'California', postalCode: '', countryCode: 'US', city: '', state: 'CA' },
+  { label: 'Texas', postalCode: '', countryCode: 'US', city: '', state: 'TX' },
+  { label: 'New York', postalCode: '', countryCode: 'US', city: '', state: 'NY' },
+  { label: 'Florida', postalCode: '', countryCode: 'US', city: '', state: 'FL' },
+  { label: 'Illinois', postalCode: '', countryCode: 'US', city: '', state: 'IL' },
   { label: 'Canada', postalCode: '', countryCode: 'CA', city: '', state: '' },
-  { label: 'United Kingdom', postalCode: '', countryCode: 'GB', city: '', state: '' },
+  { label: 'UK', postalCode: '', countryCode: 'GB', city: '', state: '' },
   { label: 'Germany', postalCode: '', countryCode: 'DE', city: '', state: '' },
+  { label: 'Japan', postalCode: '', countryCode: 'JP', city: '', state: '' },
   { label: 'Australia', postalCode: '', countryCode: 'AU', city: '', state: '' },
 ];
 
+const GLOBAL_COUNTRY_OPTIONS = [
+  { iso2: 'US', label: 'United States (+1)' },
+  { iso2: 'CA', label: 'Canada (+1)' },
+  { iso2: 'MX', label: 'Mexico (+52)' },
+  { iso2: 'GB', label: 'United Kingdom (+44)' },
+  { iso2: 'DE', label: 'Germany (+49)' },
+  { iso2: 'FR', label: 'France (+33)' },
+  { iso2: 'ES', label: 'Spain (+34)' },
+  { iso2: 'IT', label: 'Italy (+39)' },
+  { iso2: 'NL', label: 'Netherlands (+31)' },
+  { iso2: 'CH', label: 'Switzerland (+41)' },
+  { iso2: 'SE', label: 'Sweden (+46)' },
+  { iso2: 'PL', label: 'Poland (+48)' },
+  { iso2: 'IE', label: 'Ireland (+353)' },
+  { iso2: 'JP', label: 'Japan (+81)' },
+  { iso2: 'IN', label: 'India (+91)' },
+  { iso2: 'SG', label: 'Singapore (+65)' },
+  { iso2: 'KR', label: 'South Korea (+82)' },
+  { iso2: 'AE', label: 'UAE (+971)' },
+  { iso2: 'SA', label: 'Saudi Arabia (+966)' },
+  { iso2: 'PH', label: 'Philippines (+63)' },
+  { iso2: 'ID', label: 'Indonesia (+62)' },
+  { iso2: 'BR', label: 'Brazil (+55)' },
+  { iso2: 'AR', label: 'Argentina (+54)' },
+  { iso2: 'CO', label: 'Colombia (+57)' },
+  { iso2: 'NG', label: 'Nigeria (+234)' },
+  { iso2: 'ZA', label: 'South Africa (+27)' },
+  { iso2: 'KE', label: 'Kenya (+254)' },
+  { iso2: 'EG', label: 'Egypt (+20)' },
+  { iso2: 'AU', label: 'Australia (+61)' },
+  { iso2: 'NZ', label: 'New Zealand (+64)' },
+];
+
 export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
+  mode: controlledMode,
+  onModeChange,
   onNewRecordsHarvested,
   onOpenContactFinder,
 }) => {
-  const [mode, setMode] = useState<'directory' | 'url'>('directory');
+  const [internalMode, setInternalMode] = useState<'directory' | 'url'>('directory');
+  const mode = controlledMode ?? internalMode;
+  const setMode = (next: 'directory' | 'url') => {
+    setInternalMode(next);
+    onModeChange?.(next);
+  };
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [city, setCity] = useState('');
@@ -55,8 +101,10 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
   const [harvestedRecords, setHarvestedRecords] = useState<PhoneNumberRecord[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedPage, setCopiedPage] = useState(false);
+  const [copiedNameId, setCopiedNameId] = useState<string | null>(null);
+  const [copiedNumberId, setCopiedNumberId] = useState<string | null>(null);
+  const [copiedPageNames, setCopiedPageNames] = useState(false);
+  const [copiedPageNumbers, setCopiedPageNumbers] = useState(false);
 
   const mergeSessionHarvest = (summary: WebHarvestSummary) => {
     setLastSummary(summary);
@@ -165,59 +213,76 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
     return harvestedRecords.slice(start, start + HARVESTER_PAGE_SIZE);
   }, [harvestedRecords, currentPage]);
 
-  const handleCopyOne = async (rec: PhoneNumberRecord) => {
-    const ok = await copyTextToClipboard(rec.e164);
+  const handleCopyOneName = async (rec: PhoneNumberRecord) => {
+    const cleanFullName = formatDirectoryFullName(rec.ownerName);
+    const ok = await copyTextToClipboard(cleanFullName);
     if (ok) {
-      setCopiedId(rec.id);
+      setCopiedNameId(rec.id);
       setTimeout(() => {
-        setCopiedId((prev) => (prev === rec.id ? null : prev));
+        setCopiedNameId((prev) => (prev === rec.id ? null : prev));
       }, 1500);
     }
   };
 
-  const handleCopyCurrentPage = async () => {
+  const handleCopyOneNumber = async (rec: PhoneNumberRecord) => {
+    const ok = await copyTextToClipboard(rec.e164);
+    if (ok) {
+      setCopiedNumberId(rec.id);
+      setTimeout(() => {
+        setCopiedNumberId((prev) => (prev === rec.id ? null : prev));
+      }, 1500);
+    }
+  };
+
+  const handleCopyCurrentPageNames = async () => {
+    if (paginatedRecords.length === 0) return;
+    const text = paginatedRecords.map((r) => formatDirectoryFullName(r.ownerName)).join('\n');
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopiedPageNames(true);
+      setTimeout(() => setCopiedPageNames(false), 1800);
+    }
+  };
+
+  const handleCopyCurrentPageNumbers = async () => {
     if (paginatedRecords.length === 0) return;
     const text = paginatedRecords.map((r) => r.e164).join('\n');
     const ok = await copyTextToClipboard(text);
     if (ok) {
-      setCopiedPage(true);
-      setTimeout(() => setCopiedPage(false), 1800);
+      setCopiedPageNumbers(true);
+      setTimeout(() => setCopiedPageNumbers(false), 1800);
     }
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5">
+      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
         {/* Live Public Registry Harvester Header */}
-        <div className="bg-white border border-slate-200 rounded-lg p-5 flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1 max-w-xl">
-            <h1 className="text-lg font-semibold text-slate-900">
+        <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-0.5 max-w-xl">
+            <h1 className="text-base sm:text-lg font-semibold text-slate-900">
               Live Web &amp; Worldwide Phone Harvester
             </h1>
             <p className="text-xs text-slate-600">
-              Pull additional live phone numbers and individual owner names from public directories and websites into your worldwide directory. Results are paginated at 500 per page.
+              Pull live phone numbers and individual owner names from public directories and websites into your worldwide directory (500 per page).
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={executeTurboUsaWave}
-              disabled={isTurboRunning}
-              className="h-10 px-4 inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>
-                {isTurboRunning
-                  ? 'Harvesting USA Wave...'
-                  : 'USA Multi-State Fetch (+1,000+)'}
-              </span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={executeTurboUsaWave}
+            disabled={isTurboRunning}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>
+              {isTurboRunning ? 'Harvesting USA Wave...' : 'USA Multi-State Fetch (+1,000+)'}
+            </span>
+          </button>
         </div>
 
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-sm font-semibold text-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs sm:text-sm font-semibold text-slate-900">
             Targeted Public Registry Search or Webpage Scanner
           </h2>
 
@@ -225,33 +290,33 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
             <button
               type="button"
               onClick={() => setMode('directory')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
                 mode === 'directory'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Search People &amp; States
+              People &amp; Countries
             </button>
             <button
               type="button"
               onClick={() => setMode('url')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
                 mode === 'url'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Scan Any Website URL
+              Scan Website URL
             </button>
           </div>
         </div>
 
         {mode === 'directory' ? (
-          <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-medium text-slate-500 mr-1">
-                Quick Locations:
+          <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <span className="text-xs font-medium text-slate-500 shrink-0">
+                Regions:
               </span>
               {QUICK_WEB_LOCATIONS.map((loc) => (
                 <button
@@ -273,7 +338,7 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                       countryCode: loc.countryCode,
                     });
                   }}
-                  className="px-2.5 py-1 text-xs text-slate-700 bg-slate-50 hover:bg-sky-50 hover:text-sky-800 border border-slate-200 rounded transition-colors whitespace-nowrap cursor-pointer"
+                  className="px-2.5 py-1 text-xs text-slate-700 bg-slate-50 hover:bg-sky-50 hover:text-sky-800 border border-slate-200 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   {loc.label}
                 </button>
@@ -285,10 +350,10 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                 e.preventDefault();
                 executeDirectoryFetch();
               }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 items-end pt-1"
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 items-end"
             >
               <div className="space-y-1">
-                <label htmlFor="web-first" className="block text-xs font-medium text-slate-700">
+                <label htmlFor="web-first" className="block text-[11px] font-medium text-slate-700">
                   First Name
                 </label>
                 <input
@@ -296,13 +361,13 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   type="text"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="e.g. Michael"
-                  className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  placeholder="Michael"
+                  className="w-full h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="web-last" className="block text-xs font-medium text-slate-700">
+                <label htmlFor="web-last" className="block text-[11px] font-medium text-slate-700">
                   Last Name
                 </label>
                 <input
@@ -310,28 +375,28 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   type="text"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  placeholder="e.g. Smith"
-                  className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  placeholder="Smith"
+                  className="w-full h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="web-state" className="block text-xs font-medium text-slate-700">
-                  US State (2-Letter)
+                <label htmlFor="web-state" className="block text-[11px] font-medium text-slate-700">
+                  State / Code
                 </label>
                 <input
                   id="web-state"
                   type="text"
-                  maxLength={2}
+                  maxLength={3}
                   value={stateCode}
                   onChange={(e) => setStateCode(e.target.value.toUpperCase())}
-                  placeholder="CA, TX, NY..."
-                  className="w-full h-9 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  placeholder="CA, TX..."
+                  className="w-full h-8.5 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="web-city" className="block text-xs font-medium text-slate-700">
+                <label htmlFor="web-city" className="block text-[11px] font-medium text-slate-700">
                   City
                 </label>
                 <input
@@ -339,67 +404,60 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   type="text"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. Houston"
-                  className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  placeholder="Houston"
+                  className="w-full h-8.5 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="web-zip" className="block text-xs font-medium text-slate-700">
-                  Zip Code
+                <label htmlFor="web-zip" className="block text-[11px] font-medium text-slate-700">
+                  Zip / Postal
                 </label>
                 <input
                   id="web-zip"
                   type="text"
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value)}
-                  placeholder="e.g. 90210"
-                  className="w-full h-9 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  placeholder="90210"
+                  className="w-full h-8.5 px-2.5 text-xs font-mono bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="web-country" className="block text-xs font-medium text-slate-700">
+                <label htmlFor="web-country" className="block text-[11px] font-medium text-slate-700">
                   Country
                 </label>
                 <select
                   id="web-country"
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value)}
-                  className="w-full h-9 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-8.5 px-2 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 >
-                  <option value="US">United States</option>
-                  <option value="CA">Canada</option>
-                  <option value="GB">United Kingdom</option>
-                  <option value="DE">Germany</option>
-                  <option value="FR">France</option>
-                  <option value="ES">Spain</option>
-                  <option value="IT">Italy</option>
-                  <option value="IN">India</option>
-                  <option value="JP">Japan</option>
-                  <option value="AU">Australia</option>
-                  <option value="MX">Mexico</option>
-                  <option value="BR">Brazil</option>
+                  {GLOBAL_COUNTRY_OPTIONS.map((c) => (
+                    <option key={c.iso2} value={c.iso2}>
+                      {c.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="h-9 px-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60"
+                className="col-span-2 sm:col-span-1 h-8.5 px-3.5 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60"
               >
                 <Search className="w-3.5 h-3.5" />
-                {isLoading ? 'Fetching...' : 'Get Numbers'}
+                <span>{isLoading ? 'Fetching...' : 'Get Numbers'}</span>
               </button>
             </form>
           </div>
         ) : (
           <form
             onSubmit={executeUrlCrawl}
-            className="bg-white border border-slate-200 rounded-lg p-5 space-y-4"
+            className="bg-white border border-slate-200 rounded-lg p-4 space-y-3"
           >
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex-1 min-w-64 space-y-1">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2.5">
+              <div className="flex-1 space-y-1">
                 <label htmlFor="crawl-url-input" className="block text-xs font-medium text-slate-700">
                   Public Website Address (URL)
                 </label>
@@ -408,12 +466,12 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   type="text"
                   value={targetUrl}
                   onChange={(e) => setTargetUrl(e.target.value)}
-                  placeholder="https://www.whitehouse.gov/contact/ or any public contact/directory page"
-                  className="w-full h-10 px-3 text-sm bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  placeholder="https://www.whitehouse.gov/contact/ or any public contact page"
+                  className="w-full h-9 px-3 text-xs sm:text-sm bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 />
               </div>
 
-              <div className="w-44 space-y-1">
+              <div className="w-full sm:w-48 space-y-1">
                 <label htmlFor="crawl-country" className="block text-xs font-medium text-slate-700">
                   Default Country
                 </label>
@@ -421,79 +479,97 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                   id="crawl-country"
                   value={urlCountry}
                   onChange={(e) => setUrlCountry(e.target.value)}
-                  className="w-full h-10 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
+                  className="w-full h-9 px-2.5 text-xs bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-600"
                 >
-                  <option value="US">United States (+1)</option>
-                  <option value="GB">United Kingdom (+44)</option>
-                  <option value="CA">Canada (+1)</option>
-                  <option value="DE">Germany (+49)</option>
-                  <option value="FR">France (+33)</option>
-                  <option value="AU">Australia (+61)</option>
-                  <option value="IN">India (+91)</option>
+                  {GLOBAL_COUNTRY_OPTIONS.map((c) => (
+                    <option key={c.iso2} value={c.iso2}>
+                      {c.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="h-10 px-5 inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+                className="h-9 px-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
               >
                 <Link2 className="w-3.5 h-3.5" />
-                {isLoading ? 'Scanning Page...' : 'Scan Webpage'}
+                <span>{isLoading ? 'Scanning...' : 'Scan Webpage'}</span>
               </button>
             </div>
           </form>
         )}
 
         {errorMsg && (
-          <div className="p-4 bg-white border border-red-200 rounded-lg text-xs text-red-700 font-medium">
+          <div className="p-3.5 bg-white border border-red-200 rounded-lg text-xs text-red-700 font-medium">
             {errorMsg}
           </div>
         )}
 
         {(lastSummary || harvestedRecords.length > 0) && (
           <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="px-3.5 sm:px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs text-slate-700">
                 <Globe className="w-3.5 h-3.5 text-sky-700 inline mr-1.5 -mt-0.5" />
                 {lastSummary && (
                   <>
-                    Latest wave fetched{' '}
+                    Fetched{' '}
                     <span className="font-semibold text-slate-900">
                       {lastSummary.fetchedCount.toLocaleString()}
                     </span>{' '}
-                    numbers ({lastSummary.newlyAddedCount.toLocaleString()} newly added in{' '}
-                    {lastSummary.durationMs} ms) ·{' '}
+                    ({lastSummary.newlyAddedCount.toLocaleString()} new) ·{' '}
                   </>
                 )}
-                Session total:{' '}
+                Session:{' '}
                 <span className="font-semibold text-slate-900">
                   {harvestedRecords.length.toLocaleString()}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {paginatedRecords.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleCopyCurrentPage}
-                    className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-semibold text-sky-900 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded-md transition-colors whitespace-nowrap cursor-pointer"
-                    title="Copy only the phone numbers shown on the current page"
-                  >
-                    {copiedPage ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-700" />
-                        <span className="text-emerald-800">
-                          Copied Page ({paginatedRecords.length.toLocaleString()})!
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-sky-700" />
-                        <span>Copy Page ({paginatedRecords.length.toLocaleString()})</span>
-                      </>
-                    )}
-                  </button>
+                  <>
+                    {/* Small Icon-Only: Bulk Copy Page Names */}
+                    <button
+                      type="button"
+                      onClick={handleCopyCurrentPageNames}
+                      className={`h-7 px-2 inline-flex items-center justify-center gap-1 rounded border transition-colors cursor-pointer ${
+                        copiedPageNames
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                          : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+                      }`}
+                      title={`Copy all ${paginatedRecords.length.toLocaleString()} full names on this page`}
+                      aria-label={`Copy all ${paginatedRecords.length} full names on this page`}
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      {copiedPageNames ? (
+                        <Check className="w-3 h-3 text-emerald-700" />
+                      ) : (
+                        <Copy className="w-3 h-3 text-slate-500" />
+                      )}
+                    </button>
+
+                    {/* Small Icon-Only: Bulk Copy Page Numbers */}
+                    <button
+                      type="button"
+                      onClick={handleCopyCurrentPageNumbers}
+                      className={`h-7 px-2 inline-flex items-center justify-center gap-1 rounded border transition-colors cursor-pointer ${
+                        copiedPageNumbers
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                          : 'bg-sky-50 hover:bg-sky-100 border-sky-300 text-sky-900'
+                      }`}
+                      title={`Copy all ${paginatedRecords.length.toLocaleString()} phone numbers on this page`}
+                      aria-label={`Copy all ${paginatedRecords.length} phone numbers on this page`}
+                    >
+                      <Phone className="w-3.5 h-3.5 text-sky-700" />
+                      {copiedPageNumbers ? (
+                        <Check className="w-3 h-3 text-emerald-700" />
+                      ) : (
+                        <Copy className="w-3 h-3 text-sky-700" />
+                      )}
+                    </button>
+                  </>
                 )}
 
                 {harvestedRecords.length > 0 && (
@@ -504,89 +580,191 @@ export const WebHarvesterPanel: React.FC<WebHarvesterPanelProps> = ({
                       setLastSummary(null);
                       setCurrentPage(1);
                     }}
-                    className="h-8 px-2.5 inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-md transition-colors cursor-pointer"
-                    title="Clear session list (numbers remain saved in your Directory)"
+                    className="h-7 w-7 inline-flex items-center justify-center text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors cursor-pointer"
+                    title="Clear session view (numbers stay saved in your Directory)"
+                    aria-label="Clear session view"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Clear View</span>
                   </button>
                 )}
               </div>
             </div>
 
             {harvestedRecords.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-500">
-                No public phone numbers matched that exact web query. Click USA Multi-State Fetch above or choose another state.
+              <div className="p-6 text-center text-xs text-slate-500">
+                No public phone numbers matched that exact web query. Click USA Multi-State Fetch above or choose another region.
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto max-h-[520px]">
+                {/* Mobile 2-Line Compact List (< md) */}
+                <div className="md:hidden divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+                  {paginatedRecords.map((rec) => {
+                    const cleanName = formatDirectoryFullName(rec.ownerName);
+                    const isNameCopied = copiedNameId === rec.id;
+                    const isNumCopied = copiedNumberId === rec.id;
+                    return (
+                      <div key={rec.id} className="px-3 py-2.5 space-y-1 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-semibold text-slate-900 break-words">
+                              {cleanName}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyOneName(rec)}
+                              title={`Copy ${cleanName}`}
+                              aria-label={`Copy ${cleanName}`}
+                              className={`w-6 h-6 inline-flex items-center justify-center rounded border shrink-0 cursor-pointer ${
+                                isNameCopied
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                  : 'bg-slate-50 border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              {isNameCopied ? (
+                                <Check className="w-3 h-3 text-emerald-700" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => onOpenContactFinder(rec.e164)}
+                            title="Open Contact Finder dossier"
+                            aria-label="Open Contact Finder dossier"
+                            className="w-6 h-6 inline-flex items-center justify-center text-sky-800 bg-sky-50 border border-sky-200 rounded shrink-0 cursor-pointer"
+                          >
+                            <FileSearch className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono tabular-nums font-medium text-slate-800">
+                              {rec.internationalFormat}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyOneNumber(rec)}
+                              title={`Copy ${rec.e164}`}
+                              aria-label={`Copy ${rec.e164}`}
+                              className={`w-6 h-6 inline-flex items-center justify-center rounded border shrink-0 cursor-pointer ${
+                                isNumCopied
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                  : 'bg-slate-50 border-slate-200 text-slate-500'
+                              }`}
+                            >
+                              {isNumCopied ? (
+                                <Check className="w-3 h-3 text-emerald-700" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          <span className="text-[11px] text-slate-500 truncate">
+                            {rec.carrierGroup} · {[rec.city, rec.regionCode, rec.countryIso2].filter(Boolean).join(', ')}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table (md:+) */}
+                <div className="hidden md:block overflow-x-auto max-h-[520px]">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="sticky top-0 bg-slate-100 border-b border-slate-200 text-slate-700">
                       <tr>
-                        <th className="py-2.5 px-4 font-semibold">Phone Number Owner</th>
+                        <th className="py-2.5 px-4 font-semibold">Full Owner Name</th>
                         <th className="py-2.5 px-4 font-semibold">Phone Number</th>
                         <th className="py-2.5 px-4 font-semibold">Carrier &amp; Type</th>
                         <th className="py-2.5 px-4 font-semibold">Location</th>
-                        <th className="py-2.5 px-4 font-semibold text-right">Public Info</th>
+                        <th className="py-2.5 px-4 font-semibold text-right">Info</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {paginatedRecords.map((rec) => {
-                        const isCopied = copiedId === rec.id;
+                        const cleanName = formatDirectoryFullName(rec.ownerName);
+                        const isNameCopied = copiedNameId === rec.id;
+                        const isNumCopied = copiedNumberId === rec.id;
                         return (
                           <tr key={rec.id} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-4 font-semibold text-slate-900">
-                              {rec.ownerName}
-                            </td>
-                            <td className="py-2.5 px-4">
-                              <div className="flex items-center gap-2">
+                            <td className="py-2 px-4">
+                              <div className="flex items-center justify-between gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => handleCopyOne(rec)}
+                                  onClick={() => handleCopyOneName(rec)}
+                                  title={cleanName}
+                                  className="font-semibold text-slate-900 hover:text-sky-700 text-left cursor-pointer"
+                                >
+                                  {cleanName}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyOneName(rec)}
+                                  title={`Copy ${cleanName}`}
+                                  aria-label={`Copy ${cleanName}`}
+                                  className={`w-6 h-6 inline-flex items-center justify-center rounded border transition-colors shrink-0 cursor-pointer ${
+                                    isNameCopied
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                      : 'bg-slate-50 hover:bg-sky-50 text-slate-500 hover:text-sky-800 border-slate-200'
+                                  }`}
+                                >
+                                  {isNameCopied ? (
+                                    <Check className="w-3 h-3 text-emerald-700" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-2 px-4">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyOneNumber(rec)}
+                                  title={rec.e164}
                                   className="font-mono tabular-nums font-medium text-slate-900 hover:text-sky-700 cursor-pointer"
                                 >
                                   {rec.internationalFormat}
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleCopyOne(rec)}
-                                  className={`h-7 px-2.5 inline-flex items-center gap-1 text-[11px] font-medium rounded border transition-colors whitespace-nowrap cursor-pointer ${
-                                    isCopied
-                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                      : 'bg-slate-50 hover:bg-sky-50 text-slate-700 border-slate-200'
+                                  onClick={() => handleCopyOneNumber(rec)}
+                                  title={`Copy ${rec.e164}`}
+                                  aria-label={`Copy ${rec.e164}`}
+                                  className={`w-6 h-6 inline-flex items-center justify-center rounded border transition-colors shrink-0 cursor-pointer ${
+                                    isNumCopied
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                      : 'bg-slate-50 hover:bg-sky-50 text-slate-500 hover:text-sky-800 border-slate-200'
                                   }`}
                                 >
-                                  {isCopied ? (
-                                    <>
-                                      <Check className="w-3 h-3 text-emerald-700" />
-                                      Copied
-                                    </>
+                                  {isNumCopied ? (
+                                    <Check className="w-3 h-3 text-emerald-700" />
                                   ) : (
-                                    <>
-                                      <Copy className="w-3 h-3" />
-                                      Copy
-                                    </>
+                                    <Copy className="w-3 h-3" />
                                   )}
                                 </button>
                               </div>
                             </td>
-                            <td className="py-2.5 px-4 text-slate-700">
+                            <td className="py-2 px-4 text-slate-700">
                               {rec.carrierGroup} · {rec.lineType}
                             </td>
-                            <td className="py-2.5 px-4 text-slate-600">
+                            <td className="py-2 px-4 text-slate-600">
                               {[rec.city, rec.regionCode, rec.postalCode, rec.countryName]
                                 .filter(Boolean)
                                 .join(' · ')}
                             </td>
-                            <td className="py-2.5 px-4 text-right">
+                            <td className="py-2 px-4 text-right">
                               <button
                                 type="button"
                                 onClick={() => onOpenContactFinder(rec.e164)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-sky-800 hover:text-sky-950 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded transition-colors cursor-pointer"
+                                title="Open Contact Finder dossier"
+                                aria-label="Open Contact Finder dossier"
+                                className="w-7 h-7 inline-flex items-center justify-center text-sky-800 hover:text-sky-950 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded transition-colors cursor-pointer"
                               >
-                                <FileSearch className="w-3 h-3" />
-                                <span>Report</span>
+                                <FileSearch className="w-3.5 h-3.5" />
                               </button>
                             </td>
                           </tr>

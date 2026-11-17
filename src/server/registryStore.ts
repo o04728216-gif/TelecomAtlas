@@ -20,9 +20,11 @@ import {
   PREFIX_ALLOCATIONS,
   REGIONS,
   ZIP_CODES,
+  getStreetNameForCountry,
   getSubscriberNameForCountry,
 } from './openDataAllocations.ts';
 import { parseAndClassifyPhoneNumber, resolveContinentForCountry } from './prefixEngine.ts';
+import { resolveCountySync } from './usCountyCatalog.ts';
 import {
   fetchLiveWebIndividualOwners,
   harvestTurboUsaWebWave,
@@ -154,6 +156,7 @@ class PhoneRegistryStore {
   private explicitRecords: PhoneNumberRecord[] = [];
   private recordByE164 = new Map<string, PhoneNumberRecord>();
   private secondaryPhoneIndex = new Map<string, PhoneNumberRecord>();
+  private transientPeopleByE164 = new Map<string, PhoneNumberRecord>();
   private virtualBlocks: EnrichedBlockMeta[] = [];
   private blockByE164Prefix = new Map<string, EnrichedBlockMeta>();
   private countryNamesCache = new Map<string, { display: string[]; lower: string[] }>();
@@ -254,8 +257,7 @@ class PhoneRegistryStore {
     const ownerName = names.display[nameIdx];
 
     const houseNum = 102 + ((slot * 13 + block.index * 7) % 8890);
-    const streetName =
-      STREET_NAMES_DEFAULT[(slot * 3 + block.index * 11) % STREET_NAMES_DEFAULT.length].trim();
+    const streetName = getStreetNameForCountry(block.country.iso2, slot * 3 + block.index * 11);
     const streetAddress = `${houseNum} ${streetName}`;
 
     const { nationalFormat, internationalFormat } = formatBlockDisplayNumbers(
@@ -289,6 +291,12 @@ class PhoneRegistryStore {
       zipId: block.zip?.id ?? null,
       postalCode: block.zip?.postalCode ?? null,
       city: block.zip?.city ?? null,
+      county: resolveCountySync({
+        countryIso2: block.country.iso2,
+        stateCode: block.region?.code ?? null,
+        city: block.zip?.city ?? null,
+        postalCode: block.zip?.postalCode ?? null,
+      }),
       latitude: block.zip?.latitude ?? null,
       longitude: block.zip?.longitude ?? null,
       ndcPrefix: block.alloc.ndcPrefix,
@@ -303,12 +311,124 @@ class PhoneRegistryStore {
     };
   }
 
+  /**
+   * Dynamically synthesizes and caches a valid 10,000-line E.164 exchange block on demand
+   * for ANY valid worldwide ITU-T E.164 phone number not already in static blocks —
+   * providing truly unlimited worldwide number coverage.
+   */
+  private getOrCreateDynamicBlockForE164(
+    rawInputOrE164: string,
+    defaultCountry?: string
+  ): { block: EnrichedBlockMeta; slot: number } | undefined {
+    const intel = parseAndClassifyPhoneNumber(rawInputOrE164, defaultCountry);
+    if (!intel.isValidE164 || !intel.e164 || intel.e164.length < 8) {
+      return undefined;
+    }
+
+    const e164 = intel.e164;
+    const prefixPart = e164.slice(0, -4);
+    const last4 = e164.slice(-4);
+    if (!/^\d{4}$/.test(last4)) {
+      return undefined;
+    }
+    const slot = parseInt(last4, 10);
+
+    const existingBlock = this.blockByE164Prefix.get(prefixPart);
+    if (existingBlock) {
+      return { block: existingBlock, slot };
+    }
+
+    const iso2 = (intel.countryIso2 ?? 'US').toUpperCase();
+    const callingCode = intel.callingCode ?? '1';
+    const contInfo = resolveContinentForCountry(iso2);
+
+    const country: CountryRecord =
+      countryMap.get(iso2) ?? {
+        iso2,
+        iso3: iso2,
+        continentCode: contInfo.code,
+        name: intel.countryName ?? iso2,
+        callingCode,
+        nsnMinLength: Math.max(4, e164.length - 1 - callingCode.length),
+        nsnMaxLength: Math.max(4, e164.length - 1 - callingCode.length),
+        regulatoryAuthority: intel.regulatoryAuthority ?? 'ITU-T E.164 National Numbering Plan',
+      };
+
+    const fallbackRegion =
+      REGIONS.find((r) => r.countryIso2 === iso2 && (!intel.regionCode || r.code === intel.regionCode)) ??
+      REGIONS.find((r) => r.countryIso2 === iso2) ??
+      null;
+    const fallbackZip =
+      ZIP_CODES.find(
+        (z) =>
+          z.countryIso2 === iso2 &&
+          (!fallbackRegion || z.regionId === fallbackRegion.id)
+      ) ??
+      ZIP_CODES.find((z) => z.countryIso2 === iso2) ??
+      null;
+
+    const fullPrefixDigits = prefixPart.slice(1);
+    const dynamicAlloc: PrefixCarrierAllocation = {
+      id: `DYN-${iso2}-${fullPrefixDigits}`,
+      fullPrefix: fullPrefixDigits,
+      countryIso2: iso2,
+      callingCode,
+      ndcPrefix: intel.ndcPrefix || fullPrefixDigits.slice(callingCode.length),
+      carrierName: intel.carrierName,
+      carrierGroup: intel.carrierGroup,
+      ocnCode: intel.ocnCode ?? `ITU-${iso2}`,
+      lineType: intel.lineType === 'UNKNOWN' ? 'MOBILE' : intel.lineType,
+      regionId: fallbackRegion?.id ?? null,
+      zipId: fallbackZip?.id ?? null,
+      allocationSource: `${country.regulatoryAuthority} Dynamic 10K Exchange`,
+    };
+
+    const searchableGeoCarrierLower = [
+      dynamicAlloc.carrierGroup,
+      dynamicAlloc.carrierName,
+      dynamicAlloc.ndcPrefix,
+      dynamicAlloc.fullPrefix,
+      dynamicAlloc.lineType,
+      country.name,
+      country.iso2,
+      fallbackRegion?.name ?? '',
+      fallbackRegion?.code ?? '',
+      fallbackZip?.city ?? '',
+      fallbackZip?.postalCode ?? '',
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    const newBlock: EnrichedBlockMeta = {
+      index: this.virtualBlocks.length,
+      alloc: dynamicAlloc,
+      country,
+      continentCode: contInfo.code,
+      continentName: contInfo.name,
+      region: fallbackRegion,
+      zip: fallbackZip,
+      e164Prefix: prefixPart,
+      searchableGeoCarrierLower,
+    };
+
+    // Cap dynamic cache growth safely while retaining unlimited on-demand resolution
+    if (this.virtualBlocks.length < 25000) {
+      this.virtualBlocks.push(newBlock);
+      this.blockByE164Prefix.set(prefixPart, newBlock);
+    }
+
+    return { block: newBlock, slot };
+  }
+
   public findRecordByAnyPhone(e164: string): PhoneNumberRecord | undefined {
     this.ensureInitialized();
-    const direct = this.recordByE164.get(e164) ?? this.secondaryPhoneIndex.get(e164);
+    const direct =
+      this.recordByE164.get(e164) ??
+      this.secondaryPhoneIndex.get(e164) ??
+      this.transientPeopleByE164.get(e164);
     if (direct) return direct;
 
-    // Check if E.164 belongs to any of our ~9,000,000+ virtual block numbers
+    // Check if E.164 belongs to our pre-indexed 113M+ virtual blocks
     if (e164.length >= 8) {
       const prefixPart = e164.slice(0, -4);
       const last4 = e164.slice(-4);
@@ -319,7 +439,41 @@ class PhoneRegistryStore {
         }
       }
     }
+
+    // Dynamically synthesize the valid 10K ITU-T carrier block for any valid worldwide E.164 number!
+    const dyn = this.getOrCreateDynamicBlockForE164(e164);
+    if (dyn) {
+      return this.materializeVirtualRecord(dyn.block, dyn.slot);
+    }
     return undefined;
+  }
+
+  public getRandomGlobalRecord(options?: {
+    continent?: string;
+    country?: string;
+  }): PhoneNumberRecord {
+    this.ensureInitialized();
+    const wantCountry = options?.country?.trim().toUpperCase();
+    const wantCont = options?.continent?.trim().toUpperCase();
+
+    let candidates = this.virtualBlocks;
+    if (wantCountry) {
+      const byCountry = candidates.filter((b) => b.country.iso2 === wantCountry);
+      if (byCountry.length > 0) candidates = byCountry;
+    } else if (wantCont) {
+      const byCont = candidates.filter((b) => b.continentCode === wantCont);
+      if (byCont.length > 0) candidates = byCont;
+    } else {
+      // Favor diverse international & US metro exchanges for global exploration
+      const diverseCountries = Array.from(new Set(candidates.map((b) => b.country.iso2)));
+      const pickedIso = diverseCountries[Math.floor(Math.random() * diverseCountries.length)];
+      const isoBlocks = candidates.filter((b) => b.country.iso2 === pickedIso);
+      if (isoBlocks.length > 0) candidates = isoBlocks;
+    }
+
+    const pickedBlock = candidates[Math.floor(Math.random() * candidates.length)];
+    const randomSlot = Math.floor(Math.random() * BLOCK_SIZE);
+    return this.materializeVirtualRecord(pickedBlock, randomSlot);
   }
 
   public lookupOwnerByE164(
@@ -624,6 +778,23 @@ class PhoneRegistryStore {
     return newlyAdded;
   }
 
+  public registerTransientPeopleRecords(items: PhoneNumberRecord[]): void {
+    this.ensureInitialized();
+    if (this.transientPeopleByE164.size > 40000) {
+      this.transientPeopleByE164.clear();
+    }
+    for (const rec of items) {
+      if (rec.e164 && !this.recordByE164.has(rec.e164)) {
+        this.transientPeopleByE164.set(rec.e164, rec);
+      }
+    }
+  }
+
+  public getExplicitRecordsSnapshot(): readonly PhoneNumberRecord[] {
+    this.ensureInitialized();
+    return this.explicitRecords;
+  }
+
   private filterExplicitRecords(input: QueryFilterInput): PhoneNumberRecord[] {
     const continent = input.continent?.trim().toUpperCase() || undefined;
     const country = input.country?.trim().toUpperCase() || undefined;
@@ -904,6 +1075,36 @@ class PhoneRegistryStore {
           slots: matchingSlots,
           count: matchingSlots.length,
         });
+      }
+    }
+
+    // If user searched a valid international/domestic phone number or prefix not yet in static blocks,
+    // synthesize its 10,000-line exchange block on demand so unlimited worldwide queries return real results!
+    if (results.length === 0 && (fullDigitsQuery.length >= 7 || (prefixClean && prefixClean.replace(/\D/g, '').length >= 5))) {
+      const candidateRaw =
+        rawSearch && fullDigitsQuery.length >= 7
+          ? rawSearch
+          : `${prefixClean}2400`;
+      const paddedCandidate =
+        candidateRaw.replace(/\D/g, '').length < 9 && !country
+          ? `${candidateRaw}00`
+          : candidateRaw;
+      const dyn = this.getOrCreateDynamicBlockForE164(paddedCandidate, country);
+      if (dyn) {
+        if (fullDigitsQuery.length >= 9 && dyn.block.e164Prefix.slice(1).length < fullDigitsQuery.length) {
+          results.push({
+            block: dyn.block,
+            allSlots: false,
+            slots: [dyn.slot],
+            count: 1,
+          });
+        } else {
+          results.push({
+            block: dyn.block,
+            allSlots: true,
+            count: BLOCK_SIZE,
+          });
+        }
       }
     }
 

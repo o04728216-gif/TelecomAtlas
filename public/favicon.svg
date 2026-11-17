@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="ta-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B192C"/>
+      <stop offset="100%" stop-color="#0369A1"/>
+    </linearGradient>
+    <linearGradient id="ta-ring" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7DD3FC"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#ta-bg)"/>
+  <rect x="3" y="3" width="58" height="58" rx="13" stroke="#38BDF8" stroke-opacity="0.32" stroke-width="1.5"/>
+  <!-- Globe Outer Circle -->
+  <circle cx="32" cy="32" r="19" stroke="url(#ta-ring)" stroke-width="2.6"/>
+  <!-- Globe Meridian & Latitude Arcs -->
+  <ellipse cx="32" cy="32" rx="9.5" ry="19" stroke="#7DD3FC" stroke-opacity="0.85" stroke-width="2"/>
+  <path d="M13.5 27.5H50.5M13.5 36.5H50.5" stroke="#7DD3FC" stroke-opacity="0.75" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Telecom Signal Routing Vector & Active Node Beacons -->
+  <path d="M20 42C25 31 34 24 45 21" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="45" cy="21" r="4.2" fill="#38BDF8" stroke="#FFFFFF" stroke-width="2"/>
+  <circle cx="20" cy="42" r="3.2" fill="#FFFFFF"/>
+</svg>
